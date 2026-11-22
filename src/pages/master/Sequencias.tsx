@@ -18,12 +18,24 @@ export default function Sequencias() {
   const [soEste, setSoEste] = useState(false)
   const [reprogramar, setReprogramar] = useState(true)
   const [salvando, setSalvando] = useState(false)
+  // inícios editados à mão (id → data), ainda não salvos
+  const [inicios, setInicios] = useState<Map<number, string>>(new Map())
   useEffect(() => { if (base && !rec && base.recursos[0]) setRec(String(base.recursos[0].id)) }, [base, rec])
   useEffect(() => {
     if (!base || !rec) return
     setLista(base.tpes.filter((t: any) => String(t.responsavel_id) === rec && t.status !== 'FINALIZADA' && !t.arquivada).sort((a: any, b: any) => (a.sequencia ?? 9999) - (b.sequencia ?? 9999)))
-    setMudou(false)
+    setMudou(false); setInicios(new Map())
   }, [base, rec])
+  // ordem salva no banco: mantém a folga (ou a passagem no mesmo dia) entre TPEs que continuam vizinhas
+  const ordemSalva = useMemo(() => (base ? base.tpes.filter((t: any) => String(t.responsavel_id) === rec && t.status !== 'FINALIZADA' && !t.arquivada)
+    .sort((a: any, b: any) => (a.sequencia ?? 9999) - (b.sequencia ?? 9999)).map((t: any) => t.id as number) : []), [base, rec])
+  const mudarInicio = (id: number, data: string) => {
+    const m = new Map(inicios)
+    const orig = String(base?.tpes.find((t: any) => t.id === id)?.data_inicio ?? '').slice(0, 10)
+    if (!data || data === orig) m.delete(id); else m.set(id, data)
+    setInicios(m)
+  }
+  const editado = mudou || inicios.size > 0
   const mover = (i: number, d: number) => { const l = [...lista]; const [x] = l.splice(i, 1); l.splice(i + d, 0, x); setLista(l); setMudou(true) }
 
   // programação atualizada (como no MS Project): mantém a duração (dias úteis) de cada TPE e encadeia na ordem
@@ -31,10 +43,10 @@ export default function Sequencias() {
   // fim efetivo dela (atraso até hoje ou término antecipado) empurra ou puxa as seguintes. Calculada sempre,
   // não só ao mudar a ordem: atraso de uma TPE desatualiza o cronograma das próximas.
   const plano = useMemo(() => {
-    if (!base || !reprogramar || !lista.length) return null
+    if (!base || (!reprogramar && !inicios.size) || !lista.length) return null
     const outras = new Map(base.tpes.map((t: any) => [t.id, t]))
-    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any, hojeISO())
-  }, [base, lista, reprogramar, rec])
+    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any, hojeISO(), { ordemSalva, inicios })
+  }, [base, lista, reprogramar, rec, ordemSalva, inicios])
   const novasDatas = useMemo(() => {
     if (!plano) return undefined
     return new Map(plano.filter((p) => p.mudou).map((p) => [p.id, { data_inicio: p.para[0], prazo: p.para[1] }]))
@@ -45,7 +57,7 @@ export default function Sequencias() {
   const adiantadasIni = plano ? plano.filter((p) => p.iniciada && (p.desvio ?? 0) < 0) : []
   const postergadas = plano ? plano.filter((p) => p.mudou && (p.desvio ?? 0) > 0) : []
   const antecipadas = plano ? plano.filter((p) => p.mudou && (p.desvio ?? 0) < 0) : []
-  const desatualizado = !mudou && qtdMudancas > 0
+  const desatualizado = !editado && qtdMudancas > 0
   const du = (n: number) => `${Math.abs(n)} ${Math.abs(n) === 1 ? 'dia útil' : 'dias úteis'}`
 
   async function salvar() {
@@ -62,7 +74,7 @@ export default function Sequencias() {
   }
   function escolher(id: string) {
     if (id === rec) return
-    if (mudou && !window.confirm('Há alterações não salvas na sequência atual. Trocar de projetista e descartá-las?')) return
+    if (editado && !window.confirm('Há alterações não salvas na sequência atual. Trocar de projetista e descartá-las?')) return
     setRec(id)
   }
   const ordem = useMemo(() => ({ recurso: rec, ids: lista.map((t) => t.id) }), [rec, lista])
@@ -81,12 +93,13 @@ export default function Sequencias() {
         <div className="stack">
           <div className="row">
             <select value={rec} onChange={(e) => escolher(e.target.value)} style={{ maxWidth: 260 }} aria-label="Projetista">{base.recursos.map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select>
-            <button className="btn" disabled={(!mudou && !qtdMudancas) || salvando} onClick={salvar}>{salvando ? 'Salvando…' : mudou ? 'Salvar sequência' : 'Atualizar cronograma'}</button>
-            {mudou && <span className="badge ambar">alterações não salvas</span>}
+            <button className="btn" disabled={(!editado && !qtdMudancas) || salvando} onClick={salvar}>{salvando ? 'Salvando…' : editado ? 'Salvar sequência' : 'Atualizar cronograma'}</button>
+            {editado && <span className="badge ambar">alterações não salvas</span>}
+            {editado && <button type="button" className="btn fantasma pequeno" onClick={() => { setInicios(new Map()); setLista([...lista].sort((a: any, b: any) => ordemSalva.indexOf(a.id) - ordemSalva.indexOf(b.id))); setMudou(false) }}>Desfazer</button>}
           </div>
           <label className="row small" style={{ gap: 6 }}>
             <input type="checkbox" checked={reprogramar} onChange={(e) => setReprogramar(e.target.checked)} style={{ width: 16, minHeight: 0 }} />
-            Reprogramar as datas pela ordem e pelo andamento real (mantém a duração de cada TPE; atrasos empurram e antecipações puxam as seguintes; pula sábados, domingos, feriados e férias)
+            Reprogramar as datas pela ordem, pelo início editado à mão e pelo andamento real (mantém a duração de cada TPE; atrasos empurram e antecipações puxam as seguintes; pula sábados, domingos, feriados e férias)
           </label>
           {plano && qtdMudancas > 0 && (
             <div className={`aviso ${desatualizado ? 'atencao' : 'info'}`} role="status"><Icone n={desatualizado ? 'alerta' : 'info'} /><div>
@@ -108,10 +121,19 @@ export default function Sequencias() {
                   <div><strong>{t.codigo}</strong> · {t.principal} › {t.grupo}<div className="small">{t.descricao}</div>
                     <div className="row small muted" style={{ gap: 8 }}>O.S. {osBR(t.os)} · {t.cliente} · {dataBR(t.data_inicio)} → {dataBR(t.prazo)} <SeloPrazo prazo={t.prazo} status={t.status} /> <Selo v={t.status} /></div>
                     {pred && <div className="small muted">Depois de <strong>{pred.codigo}</strong>{pred.responsavel && String(pred.responsavel_id) !== rec ? ` (${pred.responsavel})` : ''}</div>}
+                    {!p?.iniciada && t.data_inicio && t.prazo && (
+                      <label className="inicio-manual small">
+                        <span>Início</span>
+                        <input type="date" value={inicios.get(t.id) ?? p?.para[0] ?? String(t.data_inicio).slice(0, 10)}
+                          onChange={(e) => mudarInicio(t.id, e.target.value)} aria-label={`Data de início de ${t.codigo}`} />
+                        {inicios.has(t.id) && <span className="badge azul" title="Data definida à mão: as TPEs seguintes se ajustam a partir dela">definido à mão</span>}
+                        {inicios.has(t.id) && p?.para[0] && p.para[0] !== inicios.get(t.id) && <span className="muted">→ ajustado para {dataBR(p.para[0])} {t.predecessora_id ? '(dia útil / predecessora)' : '(próximo dia útil)'}</span>}
+                      </label>)}
+                    {p?.iniciada && <div className="small muted" style={{ marginTop: 4 }}>Em andamento desde {dataBR(t.primeiro_apontamento ?? t.data_inicio)}: o início não pode ser alterado.</div>}
                     {p?.mudou && <div className="reprog small"><Icone n="relogio" t={14} /> Novo período: <strong>{dataBR(p.para[0])} → {dataBR(p.para[1])}</strong> ({p.dias} {p.dias === 1 ? 'dia útil' : 'dias úteis'})
                       {(p.desvio ?? 0) !== 0 && <span className={`badge ${p.desvio! > 0 ? 'vermelho' : 'verde'}`} style={{ marginLeft: 6 }}>{p.desvio! > 0 ? `postergada +${du(p.desvio!)}` : `antecipada ${du(p.desvio!)}`}</span>}</div>}
                     {p?.iniciada && (p.desvio ?? 0) !== 0 && <div className="small" style={{ marginTop: 2 }}><span className={`badge ${p.desvio! > 0 ? 'vermelho' : 'verde'}`}>{p.desvio! > 0 ? `atraso de ${du(p.desvio!)}` : `adiantada ${du(p.desvio!)}`}</span> <span className="muted">em andamento: prazo {dataBR(p.para[1])}, fim previsto {dataBR(p.fimEfetivo)}. As datas dela não mudam; as seguintes se ajustam.</span></div>}
-                    {reprogramar && p && p.dias == null && (mudou || qtdMudancas > 0) && <div className="small muted">Sem início ou prazo: as datas desta TPE não mudam e ela não empurra a fila.</div>}
+                    {reprogramar && p && p.dias == null && (editado || qtdMudancas > 0) && <div className="small muted">Sem início ou prazo: as datas desta TPE não mudam e ela não empurra a fila.</div>}
                     {foraDoPrazoOS(t) && <div className="aviso-os small"><Icone n="alerta" t={14} /> Termina depois do prazo da O.S. {osBR(t.os)} ({dataBR(foraDoPrazoOS(t))})</div>}
                     {feriasDe(t) > 0 && <div className="small muted">Inclui {feriasDe(t)} dia(s) útil(eis) de férias do projetista, que não contam na duração.</div>}
                   </div>
@@ -129,7 +151,7 @@ export default function Sequencias() {
             <label className="row small" style={{ gap: 6 }}><input type="checkbox" checked={soEste} onChange={(e) => setSoEste(e.target.checked)} style={{ width: 16, minHeight: 0 }} /> Só o projetista escolhido</label>
           </div>
           <p className="muted small" style={{ margin: '0 0 12px' }}>
-            Uma faixa por projetista, na cor dele{mudou ? ', já com a ordem e as datas ainda não salvas' : ''}. Barra de cima: <strong>planejado</strong>; de baixo: <strong>realizado</strong>. Passe o mouse para ver as datas; clique no nome para ver a sequência.
+            Uma faixa por projetista, na cor dele{editado || qtdMudancas ? ', já com a ordem e as datas ainda não salvas' : ''}. Barra de cima: <strong>planejado</strong>; de baixo: <strong>realizado</strong>. Passe o mouse para ver as datas; clique no nome para ver a sequência.
           </p>
           <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ordem={ordem} datas={novasDatas} destaque={rec} aoEscolher={escolher} somente={soEste ? rec : undefined}
             ausencias={base.ausencias} prazosOS={prazosOS} />

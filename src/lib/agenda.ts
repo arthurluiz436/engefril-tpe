@@ -43,6 +43,8 @@ export interface Reprogramada {
   fimEfetivo?: string | null
   /** desvio do fim em dias úteis em relação ao prazo salvo: + atraso/postergação, − antecipação */
   desvio?: number
+  /** início definido à mão nesta edição */
+  manual?: boolean
 }
 
 /** Diferença com sinal, em dias úteis, entre o prazo salvo e o novo fim (+ depois, − antes). */
@@ -63,14 +65,42 @@ const comecou = (t: TarefaAgenda) => !!t.primeiro_apontamento || t.status === 'E
  *   mas o fim efetivo dela é o início real + duração; se isso já passou e ela não terminou, o fim efetivo é hoje.
  *   É esse fim que empurra (atraso) ou puxa (antecipação) as tarefas seguintes;
  * - tarefa NÃO INICIADA nunca é programada para antes de hoje.
+ *
+ * Com `opcoes.ordemSalva`, duas TPEs que continuam vizinhas mantêm o intervalo salvo entre elas (folga, ou
+ * passagem no mesmo dia), como um vínculo término→início com defasagem. Com `opcoes.inicios`, a TPE começa
+ * na data informada à mão e as seguintes se recalculam a partir dela.
  */
-export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, outras: Map<number, TarefaAgenda> = new Map(), hoje?: string): Reprogramada[] {
+export interface OpcoesFila {
+  /** ordem salva da fila (ids): entre duas TPEs que continuam vizinhas, o intervalo (folga ou passagem) salvo é mantido */
+  ordemSalva?: number[]
+  /** início definido à mão (id → data): a TPE começa nessa data e as seguintes se ajustam a partir dela */
+  inicios?: Map<number, string>
+}
+
+/** Anda `n` dias úteis a partir de `d` (n = 0: o próprio dia, ou o próximo útil; n < 0: para trás). */
+export function moverDiasUteis(d: string, n: number, feriados?: Set<string>): string {
+  let x = proximoDiaUtil(d, feriados)
+  for (let k = 0; k < n && k < 2000; k++) x = proximoDiaUtil(somaDiasCorridos(x, 1), feriados)
+  for (let k = 0; k < -n && k < 2000; k++) { x = somaDiasCorridos(x, -1); for (let i = 0; i < 400 && !ehDiaUtil(x, feriados); i++) x = somaDiasCorridos(x, -1) }
+  return x
+}
+
+export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, outras: Map<number, TarefaAgenda> = new Map(), hoje?: string, opcoes: OpcoesFila = {}): Reprogramada[] {
   const fixa = (t: TarefaAgenda): Reprogramada => ({ id: t.id, codigo: t.codigo, de: [t.data_inicio, t.prazo], para: [t.data_inicio, t.prazo], dias: null, mudou: false })
   const comDatas = fila.filter((t) => t.data_inicio && t.prazo)
   if (!comDatas.length) return fila.map(fixa)
   const hojeUtil = hoje ? proximoDiaUtil(hoje, feriados) : null
-  let cursor = proximoDiaUtil(comDatas.map((t) => t.data_inicio!.slice(0, 10)).sort()[0], feriados)
+  const porId = new Map(fila.map((t) => [t.id, t]))
+  // vizinha anterior (com datas) na ordem SALVA: base para manter o intervalo entre as duas
+  const anteriorSalva = new Map<number, TarefaAgenda>()
+  if (opcoes.ordemSalva) {
+    let ant: TarefaAgenda | null = null
+    for (const id of opcoes.ordemSalva) { const t = porId.get(id); if (!t?.data_inicio || !t.prazo) continue; if (ant) anteriorSalva.set(t.id, ant); ant = t }
+  }
+  let fimAnterior: string | null = null
+  let anterior: TarefaAgenda | null = null
   const novoInicio = new Map<number, string>()
+  const primeiroInicio = proximoDiaUtil(comDatas.map((t) => t.data_inicio!.slice(0, 10)).sort()[0], feriados)
   return fila.map((t) => {
     if (!t.data_inicio || !t.prazo) return fixa(t)
     const di = t.data_inicio.slice(0, 10), pz = t.prazo.slice(0, 10)
@@ -80,20 +110,31 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
       let fimEf = fimPorDiasUteis(real, dias, feriados)
       if (fimEf < hoje) fimEf = hojeUtil!
       novoInicio.set(t.id, real)
-      cursor = proximoDiaUtil(somaDiasCorridos(fimEf, 1), feriados)
+      fimAnterior = fimEf; anterior = t
       return { id: t.id, codigo: t.codigo, de: [di, pz], para: [di, pz], dias, mudou: false, iniciada: true, fimEfetivo: fimEf, desvio: desvioDiasUteis(pz, fimEf, feriados) }
     }
-    let ini = cursor
-    if (hojeUtil && ini < hojeUtil) ini = hojeUtil
+    const manual = opcoes.inicios?.get(t.id)
+    let ini: string
+    if (manual) ini = proximoDiaUtil(manual, feriados)
+    else {
+      if (!fimAnterior) ini = primeiroInicio
+      else {
+        // intervalo salvo entre as duas (1 = dia útil seguinte; 0 = começa no dia em que a anterior termina; 2+ = folga)
+        const viz = anterior && anteriorSalva.get(t.id) === anterior ? anterior : null
+        const lag = viz ? desvioDiasUteis(viz.prazo!.slice(0, 10), di, feriados) : 1
+        ini = moverDiasUteis(fimAnterior, lag, feriados)
+      }
+      if (hojeUtil && ini < hojeUtil) ini = hojeUtil
+    }
     if (t.predecessora_id) {
       const p = novoInicio.get(t.predecessora_id) ?? outras.get(t.predecessora_id)?.data_inicio?.slice(0, 10)
       if (p && p > ini) ini = proximoDiaUtil(p, feriados)
     }
     const fim = fimPorDiasUteis(ini, dias, feriados)
     novoInicio.set(t.id, ini)
-    cursor = proximoDiaUtil(somaDiasCorridos(fim, 1), feriados)
+    fimAnterior = fim; anterior = t
     const mudou = ini !== di || fim !== pz
-    return { id: t.id, codigo: t.codigo, de: [di, pz], para: [ini, fim], dias, mudou, fimEfetivo: fim, desvio: desvioDiasUteis(pz, fim, feriados) }
+    return { id: t.id, codigo: t.codigo, de: [di, pz], para: [ini, fim], dias, mudou, fimEfetivo: fim, desvio: desvioDiasUteis(pz, fim, feriados), ...(manual ? { manual: true } : {}) }
   })
 }
 
