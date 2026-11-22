@@ -1,6 +1,6 @@
 // Regras acrescentadas depois da VER_035: jornada flexível informada e médias por TPE com revisões.
 import { describe, expect, it } from 'vitest'
-import { calcularApontamento, indicadores, PARAMETROS_VER035 as P, tpeBase } from '../../src/lib/calculo'
+import { calcularApontamento, indicadores, PARAMETROS_VER035 as P, tpeBase, type DiaEspecial } from '../../src/lib/calculo'
 
 const F = new Set<string>()
 
@@ -43,5 +43,20 @@ describe('Média por TPE com revisões', () => {
   it('modo VER_035 (reconciliação): cada revisão é uma TPE', () => {
     const k = indicadores(aps, tpes, [], ['Ana'], P, F, { agruparRevisoes: false })
     expect(k.resumo.tempo_medio_tpe).toBeCloseTo((2 + 1 + 5) / 3)
+  })
+})
+
+describe('Feriados e dias atípicos no cálculo (prévia do Registrar atividade)', () => {
+  const esp = new Map<string, DiaEspecial>([
+    ['2026-11-23', { tipo: 'NAO_TRABALHADO', adicional: 0.6 }],
+    ['2026-11-28', { tipo: 'DIA_NORMAL', adicional: null }],
+    ['2026-12-05', { tipo: 'PERCENTUAL', adicional: 0.5 }],
+  ])
+  const c = (dia: string) => calcularApontamento({ dia, hora_inicio: '08:00', hora_fim: '12:00' }, { ...P, dias_especiais: esp }, F, '07:00', ['08:00'], 50)
+  it('mesma regra da view do banco', () => {
+    expect([c('2026-11-23').tipo_dia, c('2026-11-23').horas_extras, c('2026-11-23').adicional]).toEqual(['NÃO TRABALHADO', 4, 0.6])
+    expect([c('2026-11-28').tipo_dia, c('2026-11-28').horas_normais, c('2026-11-28').horas_extras]).toEqual(['DIA ÚTIL', 4, 0])
+    expect([c('2026-12-05').tipo_dia, c('2026-12-05').horas_extras, c('2026-12-05').adicional]).toEqual(['SÁBADO', 4, 0.5])
+    expect(c('2026-11-23').custo_total).toBeCloseTo(4 * 50 * 1.6)
   })
 })

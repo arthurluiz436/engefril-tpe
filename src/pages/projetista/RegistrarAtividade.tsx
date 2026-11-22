@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { aguardandoPredecessora, minhasTarefas, paraParametros, type Tarefa } from '../../lib/dados'
+import { aguardandoPredecessora, lerDiasEspeciais, minhasTarefas, paraParametros, type Tarefa } from '../../lib/dados'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { dataBR, hm, hojeISO, osBR, somaDias } from '../../lib/formato'
-import { calcularApontamento, hhmm, min, tipoDia, type Parametros } from '../../lib/calculo'
+import { calcularApontamento, hhmm, min, tipoDia, type DiaEspecial, type Parametros } from '../../lib/calculo'
 import { Aviso, Cabecalho, Campo, Carregando, Icone, useAvisar, useConfirmar } from '../../components/ui'
 
 const RASCUNHO = 'engefril.rascunho.apontamento'
@@ -21,6 +21,7 @@ export default function RegistrarAtividade() {
   const { confirmar, elemento: dialogoConfirmar } = useConfirmar()
   const [parametros, setParametros] = useState<Parametros | null>(null)
   const [feriados, setFeriados] = useState<Set<string>>(new Set())
+  const [especiais, setEspeciais] = useState<Map<string, DiaEspecial>>(new Map())
   const [inicioPadrao, setInicioPadrao] = useState('07:00')
   const [params] = useSearchParams()
   const [tarefas, setTarefas] = useState<Tarefa[] | null>(null)
@@ -40,7 +41,7 @@ export default function RegistrarAtividade() {
 
   useEffect(() => { minhasTarefas().then((t) => setTarefas(t.filter((x) => x.status !== 'FINALIZADA'))).catch((e) => setErro(mensagemErro(e))) }, [])
   useEffect(() => {
-    supabase.from('feriados').select('data').then(({ data }) => setFeriados(new Set((data ?? []).map((x: any) => String(x.data).slice(0, 10)))))
+    supabase.from('feriados').select('*').then(({ data }) => { const r = lerDiasEspeciais(data ?? []); setFeriados(r.feriados); setEspeciais(r.especiais) })
     if (perfil?.recurso_id) {
       const id = perfil.recurso_id
       const aplicar = (data: any) => {
@@ -72,7 +73,7 @@ export default function RegistrarAtividade() {
   const hoje = hojeISO()
   // jornada flexível: horário de início já informado em outro lançamento do mesmo dia (vale para o dia todo)
   const jornadaDoDia = doDia.map((d) => d.inicio_jornada_informado).filter(Boolean).map((x) => String(x).slice(0, 5)).sort()[0] ?? null
-  const diaUtil = !!f.dia && tipoDia(f.dia, feriados) === 'DIA ÚTIL'
+  const diaUtil = !!f.dia && tipoDia(f.dia, feriados, especiais) === 'DIA ÚTIL'
   const pedirJornada = flex.ativo && diaUtil
   const inicioDeclarado = pedirJornada ? (jornadaDoDia ?? (f.inicio_jornada || null)) : null
   /** fim da jornada para um início, conforme o dia da semana (seg–qui 10 h, sexta 9 h, com almoço) */
@@ -102,11 +103,11 @@ export default function RegistrarAtividade() {
   const extra = useMemo(() => {
     if (!parametros || duracao == null || erros.dia || erros.inicio || erros.fim) return null
     const inicios = [...doDia.map((d) => d.hora_inicio.slice(0, 5)), f.hora_inicio]
-    const r = calcularApontamento({ dia: f.dia, hora_inicio: f.hora_inicio, hora_fim: f.hora_fim }, parametros, feriados, inicioPadrao, inicios, null, inicioDeclarado)
+    const r = calcularApontamento({ dia: f.dia, hora_inicio: f.hora_inicio, hora_fim: f.hora_fim }, { ...parametros, dias_especiais: especiais }, feriados, inicioPadrao, inicios, null, inicioDeclarado)
     return r.horas_extras > 0.0001 ? r : null
-  }, [parametros, feriados, inicioPadrao, doDia, f.dia, f.hora_inicio, f.hora_fim, duracao, erros, inicioDeclarado])
+  }, [parametros, feriados, especiais, inicioPadrao, doDia, f.dia, f.hora_inicio, f.hora_fim, duracao, erros, inicioDeclarado])
   const textoExtra = extra && `Esta data está considerando hora extra de ${hm(extra.horas_extras)} ${
-    extra.tipo_dia === 'FERIADO' ? `no feriado de ${dataBR(f.dia)} (${diaSemana(f.dia)})` : `${extra.tipo_dia === 'DIA ÚTIL' ? 'na' : 'no'} ${diaSemana(f.dia)}, ${dataBR(f.dia)}`
+    extra.tipo_dia === 'FERIADO' ? `no feriado de ${dataBR(f.dia)} (${diaSemana(f.dia)})` : extra.tipo_dia === 'NÃO TRABALHADO' ? `em ${dataBR(f.dia)}, dia sem expediente (${especiais.get(f.dia)?.descricao ?? diaSemana(f.dia)}), com adicional de ${Math.round(extra.adicional * 100)}%` : `${extra.tipo_dia === 'DIA ÚTIL' ? 'na' : 'no'} ${diaSemana(f.dia)}, ${dataBR(f.dia)}`
   }${extra.tipo_dia === 'DIA ÚTIL' ? ` (fora da jornada de ${extra.inicio_jornada} às ${extra.fim_jornada})` : ''}.`
   const dataDiferente = !!f.dia && f.dia !== hoje
 

@@ -11,6 +11,9 @@ import Inicio from './pages/projetista/Inicio'
 import MinhasTarefas from './pages/projetista/MinhasTarefas'
 import RegistrarAtividade from './pages/projetista/RegistrarAtividade'
 import MeusApontamentos from './pages/projetista/MeusApontamentos'
+const CronogramaProjetista = lazy(() => import('./pages/comum/CronogramaProjetista'))
+const CalendarioProjetista = lazy(() => import('./pages/comum/CalendarioEquipe').then((m) => ({ default: m.CalendarioProjetista })))
+const CalendarioSupervisor = lazy(() => import('./pages/comum/CalendarioEquipe').then((m) => ({ default: m.CalendarioSupervisor })))
 
 // telas do Master carregadas sob demanda (o projetista não baixa esse código)
 const Painel = lazy(() => import('./pages/master/Painel'))
@@ -51,6 +54,8 @@ function Rotas() {
           <Route path="/minhas-tarefas" element={<MinhasTarefas />} />
           <Route path="/registrar" element={<RegistrarAtividade />} />
           <Route path="/meus-apontamentos" element={<MeusApontamentos />} />
+          <Route path="/cronograma" element={<CronogramaProjetista />} />
+          <Route path="/calendario" element={<CalendarioProjetista />} />
           <Route path="/master/*" element={<SoMaster><Routes>
             <Route index element={<Painel />} />
             <Route path="indicadores" element={<Indicadores />} />
@@ -58,6 +63,7 @@ function Rotas() {
             <Route path="tpes" element={<Tpes />} />
             <Route path="sequencias" element={<Sequencias />} />
             <Route path="cronograma" element={<Cronograma />} />
+            <Route path="calendario" element={<CalendarioSupervisor />} />
             <Route path="os" element={<OrdensServico />} />
             <Route path="apontamentos" element={<ApontamentosMaster />} />
             <Route path="importar" element={<Importar />} />

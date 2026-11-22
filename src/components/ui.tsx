@@ -31,6 +31,7 @@ const P: Record<string, string> = {
   olho: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   cima: 'M12 19V5M5 12l7-7 7 7', baixo: 'M12 5v14M19 12l-7 7-7-7', fechar: 'M6 6l12 12M18 6L6 18',
   arquivo: 'M3 7h18v13H3zM3 7l2-4h14l2 4M10 12h4',
+  calendario: 'M4 5h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M16 14h.01M8 17h2M12 17h2',
 }
 export function Icone({ n, t = 18 }: { n: keyof typeof P | string; t?: number }) {
   return (

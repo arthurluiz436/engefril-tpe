@@ -1,3 +1,4 @@
+import type { DiaEspecial } from './calculo'
 import { supabase, buscarTudo } from './supabase'
 import { hojeISO, somaDias } from './formato'
 
@@ -39,7 +40,7 @@ export async function carregarBaseMaster() {
     aps: aps.map((a) => ({ ...a, horas_normais: Number(a.horas_normais), horas_extras: Number(a.horas_extras), horas_totais: Number(a.horas_totais),
       custo_normal: num(a.custo_normal), custo_he: num(a.custo_he), custo_total: num(a.custo_total), custo_hh: num(a.custo_hh) })),
     tpes: tpes.map((t) => ({ ...t, horas_totais: Number(t.horas_totais), horas_extras: Number(t.horas_extras), horas_normais: Number(t.horas_normais), custo_total: num(t.custo_total) })),
-    os, recursos, parametros: params.data as any, feriados: new Set<string>(feriados.map((f) => f.data)),
+    os, recursos, parametros: params.data as any, ...lerDiasEspeciais(feriados), feriadosLista: feriados,
   }
 }
 
@@ -57,3 +58,43 @@ export function paraParametros(p: any) {
 
 /** TPE esperando a predecessora ser iniciada (o projetista ainda não pode apontar nela). */
 export const aguardandoPredecessora = (t: Pick<Tarefa, 'predecessora_codigo' | 'predecessora_liberada'>) => !!t.predecessora_codigo && t.predecessora_liberada === false
+
+/**
+ * Feriados e dias atípicos (Parâmetros). `feriados` = dias sem expediente (feriado e dia útil não
+ * trabalhado), usados na agenda e na capacidade; `especiais` = regra de cálculo de cada data.
+ * Sem a migração 0008 todos os registros são feriados.
+ */
+export function lerDiasEspeciais(linhas: any[]): { feriados: Set<string>; especiais: Map<string, DiaEspecial> } {
+  const especiais = new Map<string, DiaEspecial>()
+  const feriados = new Set<string>()
+  for (const l of linhas) {
+    const d = String(l.data).slice(0, 10)
+    const tipo = (l.tipo ?? 'FERIADO') as DiaEspecial['tipo']
+    especiais.set(d, { tipo, adicional: l.adicional_he == null ? null : Number(l.adicional_he), descricao: l.descricao })
+    if (tipo === 'FERIADO' || tipo === 'NAO_TRABALHADO') feriados.add(d)
+  }
+  return { feriados, especiais }
+}
+
+/** Cronograma da equipe sem custos (funções da migração 0008), para projetistas e Supervisor. */
+export async function carregarEquipe() {
+  const [tpes, recursos, dias] = await Promise.all([
+    supabase.rpc('cronograma_equipe'),
+    supabase.from('recursos').select('*').order('id'),
+    supabase.from('feriados').select('*'),
+  ])
+  if (tpes.error) throw tpes.error
+  if (recursos.error) throw recursos.error
+  const lidos = lerDiasEspeciais(dias.data ?? [])
+  return {
+    tpes: (tpes.data ?? []).map((t: any) => ({ ...t, horas_totais: Number(t.horas_totais), qtd_apontamentos: Number(t.qtd_apontamentos) })),
+    recursos: recursos.data ?? [], dias: dias.data ?? [], ...lidos,
+  }
+}
+export async function calendarioEquipe(ini: string, fim: string) {
+  const { data, error } = await supabase.rpc('calendario_equipe', { p_ini: ini, p_fim: fim })
+  if (error) throw error
+  return (data ?? []) as any[]
+}
+/** Mensagem amigável quando a migração ainda não foi aplicada. */
+export const faltaMigracao = (e: unknown) => /cronograma_equipe|calendario_equipe|schema cache|Could not find the function/i.test(String((e as any)?.message ?? e))

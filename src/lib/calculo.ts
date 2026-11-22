@@ -13,6 +13,8 @@ export interface Parametros {
   adic_dom_feriado: number        // 1,00
   descontar_feriados_capacidade: boolean
   os_interna_limite: number       // O.S. < 1000 = interna
+  /** dias atípicos cadastrados em Parâmetros (feriado, não trabalhado, dia normal, % próprio) */
+  dias_especiais?: Map<string, DiaEspecial>
 }
 
 export const PARAMETROS_VER035: Parametros = {
@@ -20,7 +22,9 @@ export const PARAMETROS_VER035: Parametros = {
   adic_dia_util: 0.6, adic_sabado: 0.75, adic_dom_feriado: 1, descontar_feriados_capacidade: false, os_interna_limite: 1000,
 }
 
-export type TipoDia = 'DIA ÚTIL' | 'SÁBADO' | 'DOMINGO' | 'FERIADO'
+export type TipoDia = 'DIA ÚTIL' | 'SÁBADO' | 'DOMINGO' | 'FERIADO' | 'NÃO TRABALHADO'
+export type TipoEspecial = 'FERIADO' | 'NAO_TRABALHADO' | 'DIA_NORMAL' | 'PERCENTUAL'
+export interface DiaEspecial { tipo: TipoEspecial; adicional: number | null; descricao?: string }
 
 export function min(h: string): number {
   const [a, b] = h.split(':').map(Number)
@@ -36,7 +40,11 @@ export function isoDow(dia: string): number {
   return w === 0 ? 7 : w
 }
 
-export function tipoDia(dia: string, feriados: Set<string>): TipoDia {
+export function tipoDia(dia: string, feriados: Set<string>, especiais?: Map<string, DiaEspecial>): TipoDia {
+  const e = especiais?.get(dia)
+  if (e?.tipo === 'FERIADO') return 'FERIADO'
+  if (e?.tipo === 'NAO_TRABALHADO') return 'NÃO TRABALHADO'
+  if (e?.tipo === 'DIA_NORMAL') return 'DIA ÚTIL'
   if (feriados.has(dia)) return 'FERIADO'
   const w = isoDow(dia)
   return w === 7 ? 'DOMINGO' : w === 6 ? 'SÁBADO' : 'DIA ÚTIL'
@@ -57,7 +65,8 @@ export interface ResultadoApontamento {
  */
 export function calcularApontamento(a: EntradaApontamento, p: Parametros, feriados: Set<string>, inicioPadrao: string,
                                     iniciosDoDia: string[], custoHH: number | null, inicioDeclarado?: string | null): ResultadoApontamento {
-  const tipo = tipoDia(a.dia, feriados)
+  const tipo = tipoDia(a.dia, feriados, p.dias_especiais)
+  const especial = p.dias_especiais?.get(a.dia)
   const q = min(a.hora_inicio), r = min(a.hora_fim)
   const ant = min(p.inicio_antecipado)
   const z = inicioDeclarado ? min(inicioDeclarado.slice(0, 5)) : iniciosDoDia.some((h) => min(h) <= ant) ? ant : min(inicioPadrao)
@@ -70,7 +79,8 @@ export function calcularApontamento(a: EntradaApontamento, p: Parametros, feriad
   // coluna S (hora extra) = líquido do lançamento (descontado almoço cruzado) − normal
   const liquido = Math.round(r - q - pos(Math.min(r, af) - Math.max(q, ai)))
   const extra = pos(liquido - normal)
-  const adicional = tipo === 'FERIADO' || tipo === 'DOMINGO' ? p.adic_dom_feriado : tipo === 'SÁBADO' ? p.adic_sabado : p.adic_dia_util
+  const adicional = (especial?.tipo === 'NAO_TRABALHADO' || especial?.tipo === 'PERCENTUAL') && especial.adicional != null ? especial.adicional
+    : tipo === 'FERIADO' || tipo === 'DOMINGO' ? p.adic_dom_feriado : tipo === 'SÁBADO' ? p.adic_sabado : p.adic_dia_util
   const hn = normal / 60, he = extra / 60
   const cn = custoHH == null ? null : hn * custoHH
   const ce = custoHH == null ? null : he * custoHH * (1 + adicional)
@@ -245,7 +255,7 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
     total: ctot, normal: soma(aps.map((a) => a.custo_normal ?? 0)), extra: ce, pct_extra: div(ce, ctot),
     he_dia_util: soma(aps.filter((a) => a.tipo_dia === 'DIA ÚTIL').map((a) => a.custo_he ?? 0)),
     he_sabado: soma(aps.filter((a) => a.tipo_dia === 'SÁBADO').map((a) => a.custo_he ?? 0)),
-    he_dom_feriado: soma(aps.filter((a) => a.tipo_dia === 'DOMINGO' || a.tipo_dia === 'FERIADO').map((a) => a.custo_he ?? 0)),
+    he_dom_feriado: soma(aps.filter((a) => a.tipo_dia === 'DOMINGO' || a.tipo_dia === 'FERIADO' || a.tipo_dia === 'NÃO TRABALHADO').map((a) => a.custo_he ?? 0)),
     por_hora: div(ctot, horas),
     por_tpe: div(ctot, [...porTpe.values()].filter((x) => x.custo > 0).length),
     por_os: div(ctot, osAtendidas.size),

@@ -47,7 +47,7 @@ export default function Parametros() {
     <div className="stack">
       {elemento}
       <Cabecalho titulo="Parâmetros" texto="Regras de cálculo herdadas da planilha VER_035. Custos e jornada são versionados por vigência: uma mudança vale a partir da data informada e preserva a interpretação dos lançamentos antigos." />
-      <div className="row" role="tablist">{([['projetistas', 'Projetistas e custo H/H'], ['jornada', 'Jornada e hora extra'], ['feriados', 'Feriados'], ['catalogo', 'Catálogo de grupos'], ['listas', 'Listas']] as [Aba, string][]).map(([k, t]) =>
+      <div className="row" role="tablist">{([['projetistas', 'Projetistas e custo H/H'], ['jornada', 'Jornada e hora extra'], ['feriados', 'Feriado / dias atípicos'], ['catalogo', 'Catálogo de grupos'], ['listas', 'Listas']] as [Aba, string][]).map(([k, t]) =>
         <button key={k} role="tab" aria-selected={aba === k} className={`btn ${aba === k ? '' : 'sec'}`} onClick={() => setAba(k)}>{t}</button>)}</div>
 
       {aba === 'projetistas' && (
@@ -109,14 +109,7 @@ export default function Parametros() {
         </div>
       )}
 
-      {aba === 'feriados' && (
-        <div className="card stack">
-          <div className="row"><button className="btn sec pequeno" onClick={() => { const d = prompt('Data do feriado (AAAA-MM-DD):'); const n = d && prompt('Descrição:'); if (d && n) exec(supabase.from('feriados').insert({ data: d, descricao: n }), 'Feriado incluído.') }}><Icone n="mais" /> Incluir feriado</button>
-            <span className="muted small">Inclua os feriados municipais de Santa Luzia/MG. Feriado = 100% hora extra.</span></div>
-          <table className="tabela"><tbody>{feriados.map((f) => <tr key={f.data}><td>{dataBR(f.data)}</td><td>{f.descricao}</td>
-            <td><button className="btn fantasma pequeno" onClick={async () => { if (await confirmar('Remover feriado', `Remover ${dataBR(f.data)}? Lançamentos desse dia passam a ser calculados como dia comum.`, 'Remover', true)) exec(supabase.from('feriados').delete().eq('data', f.data), 'Removido.') }}><Icone n="lixo" /></button></td></tr>)}</tbody></table>
-        </div>
-      )}
+      {aba === 'feriados' && <DiasAtipicos feriados={feriados} atual={atual} exec={exec} confirmar={confirmar} />}
 
       {aba === 'catalogo' && (
         <div className="grid2">
@@ -136,6 +129,85 @@ export default function Parametros() {
             <div className="row" style={{ marginTop: 8 }}>{listas.filter((l) => l.tipo === t).map((l) => <span key={l.valor} className="chip">{l.valor}</span>)}</div>
             {t === 'vendedor' && <p className="muted small">Vendedores também são reconhecidos a partir das O.S. importadas.</p>}</div>))}</div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- Feriado / dias atípicos
+const TIPOS: Record<string, { rot: string; ajuda: string; pct: boolean; cor: string }> = {
+  FERIADO: { rot: 'Feriado', ajuda: 'Sem expediente. Todas as horas trabalhadas são hora extra a 100%.', pct: false, cor: 'vermelho' },
+  NAO_TRABALHADO: { rot: 'Dia útil não trabalhado', ajuda: 'Ponte, folga coletiva etc. Sem expediente: todas as horas trabalhadas são hora extra com o percentual informado.', pct: true, cor: 'ambar' },
+  DIA_NORMAL: { rot: 'Dia normal (sem hora extra)', ajuda: 'Ex.: sábado compensado. Conta como dia útil: dentro da jornada é hora normal, sem adicional.', pct: false, cor: 'verde' },
+  PERCENTUAL: { rot: 'Hora extra com % próprio', ajuda: 'Mantém a regra do dia (sábado, domingo ou dia útil), mas a hora extra usa o percentual informado.', pct: true, cor: 'azul' },
+}
+const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+const semanaDe = (d: string) => SEMANA[new Date(`${String(d).slice(0, 10)}T12:00:00Z`).getUTCDay()]
+
+function DiasAtipicos({ feriados, atual, exec, confirmar }: {
+  feriados: any[]; atual: any; exec: (p: PromiseLike<{ error: any }>, ok: string) => Promise<void>
+  confirmar: (titulo: string, texto: any, ok?: string, perigo?: boolean) => Promise<boolean>
+}) {
+  const semTipo = feriados.length > 0 && !('tipo' in feriados[0])
+  const [nf, setNf] = useState({ data: '', tipo: 'FERIADO', pct: '100', descricao: '' })
+  const [ano, setAno] = useState(hojeISO().slice(0, 4))
+  const t = TIPOS[nf.tipo]
+  const pctNum = Number(String(nf.pct).replace(',', '.'))
+  const erro = !nf.data ? 'Informe a data.' : nf.descricao.trim().length < 2 ? 'Descreva o dia.' : t.pct && !(pctNum >= 0 && pctNum <= 300) ? 'Percentual entre 0 e 300.' : null
+  const anos = [...new Set([hojeISO().slice(0, 4), ...feriados.map((f) => String(f.data).slice(0, 4))])].sort().reverse()
+  const lista = feriados.filter((f) => String(f.data).startsWith(ano)).sort((a, b) => String(a.data).localeCompare(String(b.data)))
+  const regra = (f: any) => {
+    const tipo = f.tipo ?? 'FERIADO'
+    if (tipo === 'FERIADO') return `tudo hora extra a ${Math.round(Number(atual?.adic_dom_feriado ?? 1) * 100)}%`
+    if (tipo === 'DIA_NORMAL') return 'horas normais na jornada, sem adicional'
+    if (tipo === 'NAO_TRABALHADO') return `tudo hora extra a ${Math.round(Number(f.adicional_he) * 100)}%`
+    return `hora extra do dia a ${Math.round(Number(f.adicional_he) * 100)}%`
+  }
+  const escolherTipo = (k: string) => setNf({ ...nf, tipo: k, pct: k === 'PERCENTUAL' && nf.pct === '100' ? '50' : k === 'NAO_TRABALHADO' && !nf.pct ? '100' : nf.pct })
+  async function incluir() {
+    if (erro) return
+    const reg: any = { data: nf.data, descricao: nf.descricao.trim() }
+    if (!semTipo) { reg.tipo = nf.tipo; reg.adicional_he = t.pct ? pctNum / 100 : null }
+    const existe = feriados.some((f) => String(f.data).slice(0, 10) === nf.data)
+    if (existe && !(await confirmar('Substituir dia', `Já existe um registro em ${dataBR(nf.data)}. Substituir?`))) return
+    await exec(supabase.from('feriados').upsert(reg, { onConflict: 'data' }), existe ? 'Dia atualizado.' : 'Dia incluído.')
+    setNf({ data: '', tipo: nf.tipo, pct: nf.pct, descricao: '' })
+  }
+  const dia = nf.data ? semanaDe(nf.data) : ''
+  const fimDeSemana = dia === 'sáb' || dia === 'dom'
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <div><h2 style={{ margin: 0 }}>Incluir feriado ou dia atípico</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>Vale para o cálculo de horas normais, horas extras e custos dos apontamentos desse dia. Ao mudar um dia, os lançamentos dele são recalculados.</p></div>
+        {semTipo && <Aviso tipo="atencao">Para usar dias atípicos (não trabalhado, dia normal ou percentual próprio), aplique a migração <code>20261122000008_dias_atipicos_equipe.sql</code> no Supabase. Até lá só é possível cadastrar feriados.</Aviso>}
+        <div className="segmentos rolavel" role="radiogroup" aria-label="Tipo de dia">
+          {Object.entries(TIPOS).map(([k, v]) => (
+            <button key={k} type="button" role="radio" aria-checked={nf.tipo === k} aria-pressed={nf.tipo === k} disabled={semTipo && k !== 'FERIADO'} onClick={() => escolherTipo(k)}>{v.rot}</button>))}
+        </div>
+        <p className="small" style={{ margin: 0 }}>{t.ajuda}</p>
+        <div className="grid4">
+          <Campo rotulo="Data"><input type="date" value={nf.data} onChange={(e) => setNf({ ...nf, data: e.target.value })} /></Campo>
+          <Campo rotulo="Descrição"><input value={nf.descricao} maxLength={80} placeholder={nf.tipo === 'FERIADO' ? 'Ex.: Aniversário da cidade' : nf.tipo === 'DIA_NORMAL' ? 'Ex.: Sábado compensado' : 'Ex.: Ponte do feriado'} onChange={(e) => setNf({ ...nf, descricao: e.target.value })} /></Campo>
+          {t.pct && <Campo rotulo="Adicional de hora extra (%)" ajuda="Ex.: 50, 60, 75 ou 100"><input type="number" min={0} max={300} step={5} value={nf.pct} onChange={(e) => setNf({ ...nf, pct: e.target.value })} /></Campo>}
+          <div style={{ alignSelf: 'end' }}><button className="btn" disabled={!!erro} onClick={incluir} title={erro ?? ''}><Icone n="mais" /> Incluir</button></div>
+        </div>
+        {nf.data && <p className="muted small" style={{ margin: 0 }}>{dataBR(nf.data)} é {dia}.
+          {nf.tipo === 'DIA_NORMAL' && !fimDeSemana ? ' Esse dia já é dia útil; “dia normal” serve para sábado ou domingo.' : ''}
+          {nf.tipo === 'NAO_TRABALHADO' && fimDeSemana ? ' Fim de semana já é sem expediente; para mudar o percentual, use “% próprio”.' : ''}</p>}
+      </div>
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Cadastrados</h2>
+          <select value={ano} onChange={(e) => setAno(e.target.value)} style={{ maxWidth: 120 }} aria-label="Ano">{anos.map((a) => <option key={a}>{a}</option>)}</select>
+        </div>
+        {lista.length === 0 ? <p className="muted small">Nenhum feriado ou dia atípico em {ano}.</p> : (
+          <table className="tabela"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Regra de cálculo</th><th></th></tr></thead>
+            <tbody>{lista.map((f) => { const tipo = TIPOS[f.tipo ?? 'FERIADO'] ?? TIPOS.FERIADO; return (
+              <tr key={f.data}><td className="sem-quebra">{dataBR(f.data)} <span className="muted small">{semanaDe(f.data)}</span></td>
+                <td><span className={`badge ${tipo.cor}`}>{tipo.rot}</span></td><td>{f.descricao}</td><td className="small">{regra(f)}</td>
+                <td><button className="btn fantasma pequeno" aria-label={`Remover ${dataBR(f.data)}`} onClick={async () => { if (await confirmar('Remover dia', `Remover ${dataBR(f.data)}? Os lançamentos desse dia voltam a ser calculados como dia comum.`, 'Remover', true)) exec(supabase.from('feriados').delete().eq('data', f.data), 'Removido.') }}><Icone n="lixo" /></button></td></tr>) })}</tbody></table>)}
+        <p className="muted small">Inclua também os feriados municipais. Feriado e dia útil não trabalhado ficam fora da capacidade e da contagem de dias úteis dos prazos.</p>
+      </div>
     </div>
   )
 }
