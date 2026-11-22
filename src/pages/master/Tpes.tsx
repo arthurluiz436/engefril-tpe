@@ -5,8 +5,8 @@ import { supabase, mensagemErro } from '../../lib/supabase'
 import { paraParametros, situacaoPrazo } from '../../lib/dados'
 import { horasPorDiaUtil } from '../../lib/calculo'
 import { linhasDe } from '../../lib/conjuntos'
-import { dataBR, h1, hojeISO, osBR, pct } from '../../lib/formato'
-import { diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoDiaUtil, proximoNumeroTpe } from '../../lib/agenda'
+import { dataBR, diasEntre, h1, hojeISO, osBR, pct, somaDias } from '../../lib/formato'
+import { corRecurso, diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoDiaUtil, proximoNumeroTpe } from '../../lib/agenda'
 import { Aviso, Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, SeloPrazo, Vazio, useAvisar, useConfirmar } from '../../components/ui'
 
 const STATUS = ['NÃO INICIADA', 'EM ANDAMENTO', 'PAUSADA', 'FINALIZADA']
@@ -85,6 +85,21 @@ export default function Tpes() {
   const comResponsavel = (e: any, responsavel_id: string) => (e.dias && e.data_inicio ? comDias({ ...e, responsavel_id }, e.dias) : { ...e, responsavel_id })
   const comPrazo = (e: any, prazo: string) => ({ ...e, prazo, dias: diasDe(e.data_inicio, prazo, e.responsavel_id) })
 
+  // disponibilidade do responsável: dia útil seguinte ao maior prazo das TPEs dele em aberto (atrasadas contam até hoje)
+  const disp = useMemo(() => {
+    if (!base || !ed?.responsavel_id) return null
+    const c = cal(ed.responsavel_id)
+    const outras = base.tpes.filter((t: any) => String(t.responsavel_id) === String(ed.responsavel_id) && t.id !== ed.id && !t.arquivada && t.status !== 'FINALIZADA')
+    const comPrazo = outras.filter((t: any) => t.prazo)
+    const hoje = hojeISO()
+    let ultima: any = null, ate: string | null = null
+    for (const t of comPrazo) { const p = String(t.prazo).slice(0, 10); const ef = p < hoje ? hoje : p; if (!ate || ef > ate) { ate = ef; ultima = t } }
+    const livre = proximoDiaUtil(ate ? somaDias(ate, 1) : hoje, c)
+    return { livre, ultima, atrasada: !!ultima && String(ultima.prazo).slice(0, 10) < hoje, qtd: outras.length, semPrazo: outras.length - comPrazo.length }
+  }, [base, ed?.responsavel_id, ed?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const corResp = useMemo(() => new Map((base?.recursos ?? []).map((r: any, i: number) => [String(r.id), corRecurso(r, i)])), [base])
+  const osSel: any = ed && base ? base.os.find((o: any) => String(o.os) === String(ed.os)) : null
+  const prazoOS = osSel?.prazo_final ? String(osSel.prazo_final).slice(0, 10) : null
   const horasDia = useMemo(() => (base ? horasPorDiaUtil(paraParametros(base.parametros)) : 8.8), [base])
   const sugestao = ed && base && ed.principal && ed.grupo ? prazoMedioGrupo(base.tpes, ed.principal, ed.grupo, horasDia) : null
   const porId = useMemo(() => new Map((base?.tpes ?? []).map((t: any) => [t.id, t])), [base])
@@ -190,7 +205,7 @@ export default function Tpes() {
                   <td>{osBR(t.os)}<div className="small muted">{t.cliente}</div></td>
                   <td className="small">{t.principal} › {t.grupo}{t.grupo_original && t.grupo_original !== t.grupo && <div className="muted" title="Texto da planilha original">orig.: {t.grupo_original}</div>}</td>
                   <td className="small" style={{ maxWidth: 320 }}>{t.descricao}</td>
-                  <td>{t.responsavel ?? <span className="badge ambar">sem responsável</span>}{t.sequencia && t.status !== 'FINALIZADA' && <div className="small muted">na fila</div>}</td>
+                  <td>{t.responsavel ? <span className="ind-proj" style={{ fontWeight: 500 }}><span className="g2-ponto" style={{ background: corResp.get(String(t.responsavel_id)) }} />{t.responsavel}</span> : <span className="badge ambar">sem responsável</span>}{t.sequencia && t.status !== 'FINALIZADA' && <div className="small muted">na fila</div>}</td>
                   <td><Selo v={t.status} /></td>
                   <td className="sem-quebra small">{dataBR(t.data_inicio)} → {dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><SeloPrazo prazo={t.prazo} status={t.status} /></div>}</td>
                   <td className="num">{h1(t.horas_totais)}{Math.abs((t.horas_tarefa ?? t.horas_totais) - t.horas_totais) > 1e-9 && <div className="small muted" title="Horas desta TPE somadas às das revisões (.1, .2…), usadas nas médias">c/ revisões {h1(t.horas_tarefa)}</div>}</td>
@@ -233,13 +248,32 @@ export default function Tpes() {
             <Campo rotulo="Descrição" erro={erros.descricao}><textarea rows={2} maxLength={500} value={ed.descricao} onChange={(e) => setEd({ ...ed, descricao: e.target.value })} placeholder="Ex.: Elaboração do desenho do vaso SLCH1930 -35°C" /></Campo>
             <div className="grid2">
               <Campo rotulo="Responsável" ajuda="Entra no fim da fila do projetista; a ordem se ajusta em Sequência por projetista.">
-                <select value={ed.responsavel_id} onChange={(e) => setEd(comResponsavel(ed, e.target.value))}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
+                <div className="sel-resp" style={{ ['--cor-resp' as any]: ed.responsavel_id ? corResp.get(String(ed.responsavel_id)) : 'transparent' }}>
+                  {ed.responsavel_id && <span className="g2-ponto" aria-hidden="true" />}
+                  <select value={ed.responsavel_id} onChange={(e) => setEd(comResponsavel(ed, e.target.value))}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id} style={{ color: corResp.get(String(r.id)) }}>● {r.nome}</option>)}</select>
+                </div></Campo>
               <Campo rotulo="Predecessora" ajuda="Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.">
                 <select value={ed.predecessora_id} onChange={(e) => setEd({ ...ed, predecessora_id: e.target.value })}>
                   <option value="">Nenhuma</option>
                   {opcoesPred.map((t: any) => <option key={t.id} value={t.id}>{t.codigo} · {t.grupo}{t.responsavel ? ` · ${t.responsavel}` : ''} · {t.status.toLowerCase()}</option>)}
                 </select></Campo>
             </div>
+            {disp && (() => {
+              const nome = base.recursos.find((r: any) => String(r.id) === String(ed.responsavel_id))?.nome ?? ''
+              const conflito = ed.data_inicio && ed.data_inicio < disp.livre && disp.ultima
+              return (
+                <div className={`disp-resp ${conflito ? 'conflito' : ''}`} role="status" style={{ ['--cor-resp' as any]: corResp.get(String(ed.responsavel_id)) }}>
+                  <Icone n="calendario" t={16} />
+                  <div>
+                    {disp.ultima
+                      ? <><strong>{nome}</strong> fica livre a partir de <strong>{dataBR(disp.livre)}</strong> — a última tarefa em aberto na fila é <strong>{disp.ultima.codigo}</strong>, {disp.atrasada ? <>com prazo vencido em {dataBR(disp.ultima.prazo)} (considerada até hoje)</> : <>com prazo em {dataBR(disp.ultima.prazo)}</>}.</>
+                      : <><strong>{nome}</strong> não tem tarefas em aberto com prazo: disponível a partir de <strong>{dataBR(disp.livre)}</strong>.</>}
+                    {disp.semPrazo > 0 && <span className="muted"> Há {disp.semPrazo} TPE(s) sem prazo nessa fila, que não entram nesta conta.</span>}
+                    {conflito && <div className="texto-atraso small">O início informado ({dataBR(ed.data_inicio)}) coincide com outras tarefas de {nome.split(' ')[0]}.</div>}
+                  </div>
+                  {ed.data_inicio !== disp.livre && <button type="button" className="btn sec pequeno" onClick={() => setEd(comInicio(ed, disp.livre))}>Começar em {dataBR(disp.livre)}</button>}
+                </div>)
+            })()}
             {pred && (
               <div className={`aviso ${iniciada(pred) ? 'ok' : 'atencao'}`} role="status"><Icone n={iniciada(pred) ? 'check' : 'info'} /><div>
                 {iniciada(pred) ? <><strong>{pred.codigo}</strong> já foi iniciada: esta TPE está liberada.</> : <><strong>{pred.codigo}</strong> ainda não foi iniciada: o projetista verá esta TPE como “aguardando” e não conseguirá apontar até ela começar.</>}
@@ -253,6 +287,9 @@ export default function Tpes() {
               <Campo rotulo="Prazo" erro={erros.prazo}><input type="date" value={ed.prazo} onChange={(e) => setEd(comPrazo(ed, e.target.value))} /></Campo>
               {!ed.novo && ed.status === 'FINALIZADA' && <Campo rotulo="Data de finalização" erro={erros.data_fim}><input type="date" value={ed.data_fim} onChange={(e) => setEd({ ...ed, data_fim: e.target.value })} /></Campo>}
             </div>
+            {prazoOS && (ed.prazo && ed.prazo > prazoOS
+              ? <div className="aviso-os" role="alert">Atenção: o prazo desta TPE ({dataBR(ed.prazo)}) passa {diasEntre(prazoOS, ed.prazo)} dia(s) do prazo final da O.S. {osBR(ed.os)} ({dataBR(prazoOS)}).</div>
+              : <p className="muted small" style={{ margin: 0 }}>Prazo final da O.S. {osBR(ed.os)}: <strong>{dataBR(prazoOS)}</strong>{ed.prazo ? ` · folga de ${diasEntre(ed.prazo, prazoOS)} dia(s)` : ''}.</p>)}
             {sugestao && (
               <div className="sugestao-prazo small">
                 <Icone n="grafico" t={16} />

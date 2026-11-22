@@ -84,11 +84,20 @@ export default function Gantt(p: GanttProps) {
         const concluidas = !mostrarConcluidas ? [] : base
           .filter((t: any) => String(t.responsavel_id) === id && t.status === 'FINALIZADA' && iso(t.data_fim) && iso(t.data_fim)! >= ini)
           .sort((a, b) => String(a.data_fim).localeCompare(String(b.data_fim)))
-        // carga: tarefas em aberto cujo planejado cobre cada dia útil
+        // carga: tarefas que ocupam a pessoa em cada dia útil.
+        // Em aberto: do início (ou do 1º apontamento, se começou antes) até o prazo — e, se atrasada, até hoje.
+        // Concluídas: período real, do 1º apontamento (ou início) até a finalização (adiantadas e atrasadas).
         const ausente = diasDeAusencia(ausencias, id)
         const carga = new Map<string, any[]>()
-        for (const t of abertas) {
-          const a = iso(t.data_inicio), b = iso(t.prazo)
+        const periodo = (t: any): [string | null, string | null] => {
+          const ap = iso(t.primeiro_apontamento), di = iso(t.data_inicio)
+          const a = ap && di ? (ap < di ? ap : di) : ap ?? di
+          if (t.status === 'FINALIZADA') return [ap ?? di, iso(t.data_fim)]
+          const p = iso(t.prazo)
+          return [a, p ? (p < hoje ? hoje : p) : null]
+        }
+        for (const t of [...abertas, ...concluidas]) {
+          const [a, b] = periodo(t)
           if (!a || !b || b < a) continue
           for (let x = a < ini ? ini : a, k = 0; x <= b && k < 400; x = somaDias(x, 1), k++) {
             if (!ehDiaUtil(x, feriados) || ausente.has(x)) continue
@@ -114,7 +123,7 @@ export default function Gantt(p: GanttProps) {
         const l = { tipo: 'tarefa' as const, y, h: H_LINHA, pista: pi, t: it.t, rot: it.rot, feita: it.feita, zebra: k % 2 === 1 }
         linhas.push(l); linhaDe.set(it.t.id, l); donoDe.set(it.t.id, pi); y += H_LINHA
       })
-      if (mostrarCarga && pi.abertas.length) { linhas.push({ tipo: 'carga', y, h: H_CARGA, pista: pi }); y += H_CARGA }
+      if (mostrarCarga && pi.carga.size) { linhas.push({ tipo: 'carga', y, h: H_CARGA, pista: pi }); y += H_CARGA }
     }
     // faixa vertical de cada projetista (para sombrear as férias)
     const faixa = new Map<string, { y0: number; y1: number }>()
