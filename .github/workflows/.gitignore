@@ -1,0 +1,15 @@
+private/
+backups/
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.dump
+*.gpg
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+dist-demo/
+*.log
