@@ -51,7 +51,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <img src={logoBranco} alt="Engefril" />
       </div>
       <aside className={`sidebar ${aberta ? 'aberta' : ''}`} aria-label="Menu principal">
-        <div className="marca"><img src={logoBranco} alt="Engefril" /><span>Gestão de TPEs</span></div>
+        <div className="marca"><img src={logoBranco} alt="Engefril" /><span>GESTÃO DE PROJETOS - TPE</span></div>
         <nav>
           {perfil?.recurso_id && (<><div className="grupo">Meu trabalho</div>{MENU_PROJETISTA.map(link)}</>)}
           {master && MENU_MASTER.map((g) => (<div key={g.grupo} style={{ display: 'contents' }}><div className="grupo">{g.grupo}</div>{g.itens.map(link)}</div>))}

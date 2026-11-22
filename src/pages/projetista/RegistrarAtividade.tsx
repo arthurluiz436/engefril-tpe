@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { minhasTarefas, type Tarefa } from '../../lib/dados'
+import { minhasTarefas, paraParametros, type Tarefa } from '../../lib/dados'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { dataBR, hm, hojeISO, somaDias } from '../../lib/formato'
-import { min } from '../../lib/calculo'
-import { Aviso, Cabecalho, Campo, Carregando, Icone, useAvisar } from '../../components/ui'
+import { calcularApontamento, min, type Parametros } from '../../lib/calculo'
+import { Aviso, Cabecalho, Campo, Carregando, Icone, useAvisar, useConfirmar } from '../../components/ui'
 
 const RASCUNHO = 'engefril.rascunho.apontamento'
 const JANELA = 45 // deve coincidir com public.janela_lancamento_dias()
 
 interface Form { tpe_id: number | null; dia: string; hora_inicio: string; hora_fim: string; descricao: string; req: string }
+const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
+function diaSemana(iso: string) { const [a, m, d] = iso.split('-').map(Number); return DIAS_SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()] }
 const novoForm = (tpe: number | null = null): Form => ({ tpe_id: tpe, dia: hojeISO(), hora_inicio: '', hora_fim: '', descricao: '', req: crypto.randomUUID() })
 
 export default function RegistrarAtividade() {
   const { perfil } = useAuth()
   const avisar = useAvisar()
+  const { confirmar, elemento: dialogoConfirmar } = useConfirmar()
+  const [parametros, setParametros] = useState<Parametros | null>(null)
+  const [feriados, setFeriados] = useState<Set<string>>(new Set())
+  const [inicioPadrao, setInicioPadrao] = useState('07:00')
   const [params] = useSearchParams()
   const [tarefas, setTarefas] = useState<Tarefa[] | null>(null)
   const [passo, setPasso] = useState(1)
@@ -32,6 +38,15 @@ export default function RegistrarAtividade() {
   })
 
   useEffect(() => { minhasTarefas().then((t) => setTarefas(t.filter((x) => x.status !== 'FINALIZADA'))).catch((e) => setErro(mensagemErro(e))) }, [])
+  useEffect(() => {
+    supabase.from('feriados').select('data').then(({ data }) => setFeriados(new Set((data ?? []).map((x: any) => String(x.data).slice(0, 10)))))
+    if (perfil?.recurso_id) supabase.from('recursos').select('inicio_padrao').eq('id', perfil.recurso_id).maybeSingle()
+      .then(({ data }) => { if (data?.inicio_padrao) setInicioPadrao(String(data.inicio_padrao).slice(0, 5)) })
+  }, [perfil?.recurso_id])
+  useEffect(() => {
+    if (!f.dia) return
+    supabase.rpc('parametros_vigentes', { p_dia: f.dia }).then(({ data, error }) => { if (!error && data) setParametros(paraParametros(data)) })
+  }, [f.dia])
   useEffect(() => { localStorage.setItem(RASCUNHO, JSON.stringify(f)) }, [f])
   useEffect(() => {
     if (!f.dia) return
@@ -57,6 +72,27 @@ export default function RegistrarAtividade() {
   }, [f, hoje])
   const sobrepostos = doDia.filter((d) => f.hora_inicio && f.hora_fim && min(d.hora_inicio.slice(0, 5)) < min(f.hora_fim) && min(d.hora_fim.slice(0, 5)) > min(f.hora_inicio))
   const duracao = f.hora_inicio && f.hora_fim && !erros.fim ? (min(f.hora_fim) - min(f.hora_inicio) - Math.max(0, Math.min(min(f.hora_fim), 780) - Math.max(min(f.hora_inicio), 720))) / 60 : null
+  // hora extra prevista para este lançamento (mesma regra do cálculo oficial)
+  const extra = useMemo(() => {
+    if (!parametros || duracao == null || erros.dia || erros.inicio || erros.fim) return null
+    const inicios = [...doDia.map((d) => d.hora_inicio.slice(0, 5)), f.hora_inicio]
+    const r = calcularApontamento({ dia: f.dia, hora_inicio: f.hora_inicio, hora_fim: f.hora_fim }, parametros, feriados, inicioPadrao, inicios, null)
+    return r.horas_extras > 0.0001 ? r : null
+  }, [parametros, feriados, inicioPadrao, doDia, f.dia, f.hora_inicio, f.hora_fim, duracao, erros])
+  const textoExtra = extra && `Esta data está considerando hora extra de ${hm(extra.horas_extras)} ${
+    extra.tipo_dia === 'FERIADO' ? `no feriado de ${dataBR(f.dia)} (${diaSemana(f.dia)})` : `${extra.tipo_dia === 'DIA ÚTIL' ? 'na' : 'no'} ${diaSemana(f.dia)}, ${dataBR(f.dia)}`
+  }${extra.tipo_dia === 'DIA ÚTIL' ? ` (fora da jornada de ${extra.inicio_jornada} às ${extra.fim_jornada})` : ''}.`
+  const dataDiferente = !!f.dia && f.dia !== hoje
+
+  async function avancar() {
+    if (passo === 2 && dataDiferente) {
+      const ok = await confirmar('Data diferente de hoje',
+        <span>A data informada, <strong>{dataBR(f.dia)} ({diaSemana(f.dia)})</strong>, não confere com a data de hoje, <strong>{dataBR(hoje)}</strong>. Deseja continuar com esta data?</span>,
+        'Sim, continuar')
+      if (!ok) return
+    }
+    setPasso(passo + 1)
+  }
   const passoOk = (p: number) => (p === 1 ? !erros.tpe : p === 2 ? !erros.dia && !erros.inicio && !erros.fim : p === 3 ? !erros.descricao : true)
 
   async function salvar() {
@@ -132,6 +168,8 @@ export default function RegistrarAtividade() {
               ))}
             </div>
             {duracao != null && <div className="muted small">Duração líquida: <strong>{hm(duracao)}</strong> (horas normais e extras são calculadas pelo sistema conforme sua jornada).</div>}
+            {dataDiferente && !erros.dia && <Aviso tipo="atencao">A data informada ({dataBR(f.dia)}, {diaSemana(f.dia)}) não é a data de hoje ({dataBR(hoje)}).</Aviso>}
+            {textoExtra && <Aviso tipo="atencao"><strong>Hora extra:</strong> {textoExtra}</Aviso>}
             {sobrepostos.length > 0 && <Aviso tipo="atencao">Este horário se sobrepõe a {sobrepostos.length} lançamento(s) seu(s) neste dia ({sobrepostos.map((s) => `${s.tpe_codigo} ${s.hora_inicio.slice(0, 5)}–${s.hora_fim.slice(0, 5)}`).join(', ')}). Confira antes de continuar.</Aviso>}
           </>
         )}
@@ -153,16 +191,19 @@ export default function RegistrarAtividade() {
               <tr><td className="muted">Quando</td><td>{dataBR(f.dia)}, das {f.hora_inicio} às {f.hora_fim} {duracao != null && <span className="muted">({hm(duracao)})</span>}</td></tr>
               <tr><td className="muted">Descrição</td><td>{f.descricao}</td></tr>
             </tbody></table>
+            {dataDiferente && <Aviso tipo="atencao">Atenção: a data deste lançamento ({dataBR(f.dia)}) é diferente de hoje ({dataBR(hoje)}).</Aviso>}
+            {textoExtra && <Aviso tipo="atencao"><strong>Hora extra:</strong> {textoExtra}</Aviso>}
             <p className="muted small" style={{ margin: 0 }}>Você poderá corrigir este lançamento por até 7 dias. Registrar horas não conclui a tarefa.</p>
           </>
         )}
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <button className="btn sec" disabled={passo === 1 || salvando} onClick={() => setPasso(passo - 1)}>Voltar</button>
           {passo < 4
-            ? <button className="btn" disabled={!passoOk(passo)} onClick={() => setPasso(passo + 1)}>Continuar</button>
+            ? <button className="btn" disabled={!passoOk(passo)} onClick={avancar}>Continuar</button>
             : <button className="btn" disabled={salvando || Object.keys(erros).length > 0} onClick={salvar}><Icone n="check" /> {salvando ? 'Salvando…' : 'Salvar apontamento'}</button>}
         </div>
       </div>
+      {dialogoConfirmar}
     </div>
   )
 }

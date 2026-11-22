@@ -31,7 +31,7 @@ export default function Login() {
       <div className="lado">
         <img src={logoBranco} alt="Engefril" style={{ width: 190 }} />
         <div>
-          <h1>Gestão de TPEs e apontamentos</h1>
+          <h1>GESTÃO DE PROJETOS - TAREFAS E APONTAMENTOS</h1>
           <p style={{ maxWidth: 440 }}>Tarefas de projeto, sequência de execução e registro das horas da engenharia em um só lugar, com acesso individual e seguro.</p>
         </div>
         <p className="small">Engefril · Refrigeração industrial e termoisolantes</p>
@@ -51,7 +51,7 @@ export default function Login() {
           <button type="button" className="btn fantasma pequeno" onClick={() => { setModo(modo === 'entrar' ? 'recuperar' : 'entrar'); setErro(null); setOk(null) }}>
             {modo === 'entrar' ? 'Esqueci minha senha' : 'Voltar para entrar'}
           </button>
-          <p className="muted small" style={{ margin: 0 }}>Não há cadastro aberto: o acesso é criado por convite do administrador Master.</p>
+          <p className="muted small" style={{ margin: 0 }}>Não há cadastro aberto: o acesso é criado por convite do Supervisor.</p>
         </form>
       </div>
     </div>
