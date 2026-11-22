@@ -35,14 +35,17 @@ describe('Reprogramação ao mudar a ordem', () => {
 })
 
 describe('Prazo médio e numeração', () => {
-  it('média de dias úteis das finalizadas do grupo', () => {
+  it('média de horas por TPE do grupo (revisões somam na original) ÷ horas do dia', () => {
     const tpes = [
-      { principal: 'EQ', grupo: 'VASO', status: 'FINALIZADA', data_inicio: '2026-11-16', data_fim: '2026-11-18' }, // 3
-      { principal: 'EQ', grupo: 'VASO', status: 'FINALIZADA', data_inicio: '2026-11-16', data_fim: '2026-11-20' }, // 5
-      { principal: 'EQ', grupo: 'VASO', status: 'EM ANDAMENTO', data_inicio: '2026-11-16', data_fim: null },
+      { codigo: 'TPE-001.0', principal: 'ELE', grupo: 'PLC', horas_totais: 100 },
+      { codigo: 'TPE-001.1', principal: 'ELE', grupo: 'PLC', horas_totais: 19.5 }, // mesma TPE: 119,5 h
+      { codigo: 'TPE-002.0', principal: 'ELE', grupo: 'PLC', horas_totais: 119.5 },
+      { codigo: 'TPE-003.0', principal: 'ELE', grupo: 'PLC', horas_totais: 0 }, // sem horas: fora da média
     ]
-    expect(prazoMedioGrupo(tpes, 'EQ', 'VASO')).toEqual({ dias: 4, n: 2, base: 'grupo' })
-    expect(prazoMedioGrupo(tpes, 'EQ', 'OUTRO')).toEqual({ dias: 4, n: 2, base: 'principal' })
+    expect(prazoMedioGrupo(tpes, 'ELE', 'PLC', 8.8)).toEqual({ horas: 119.5, n: 2, dias: 14, base: 'grupo' })
+    expect(prazoMedioGrupo(tpes, 'ELE', 'OUTRO', 8.8)).toEqual({ horas: 119.5, n: 2, dias: 14, base: 'principal' })
+    expect(prazoMedioGrupo(tpes, 'MEC', 'X', 8.8)).toBeNull()
+    expect(prazoMedioGrupo([{ codigo: 'TPE-009.0', principal: 'A', grupo: 'B', horas_totais: 17.6 }], 'A', 'B', 8.8)!.dias).toBe(2)
   })
   it('reaproveita o menor número livre', () => {
     expect(proximoNumeroTpe([1, 3, 4])).toBe(2)

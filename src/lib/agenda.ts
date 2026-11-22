@@ -61,14 +61,25 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
   })
 }
 
-/** Média de dias úteis (início → finalização) das TPEs finalizadas do mesmo principal+grupo (ou do principal). */
-export function prazoMedioGrupo(tpes: any[], principal: string, grupo: string, feriados?: Set<string>): { dias: number; n: number; base: 'grupo' | 'principal' } | null {
-  const dur = (ts: any[]) => ts.filter((t) => t.status === 'FINALIZADA' && t.data_inicio && t.data_fim && t.data_fim >= t.data_inicio)
-    .map((t) => Math.max(1, diasUteisEntre(String(t.data_inicio).slice(0, 10), String(t.data_fim).slice(0, 10), feriados)))
-  const g = dur(tpes.filter((t) => t.principal === principal && t.grupo === grupo))
-  if (g.length) return { dias: Math.round(g.reduce((a, b) => a + b, 0) / g.length), n: g.length, base: 'grupo' }
-  const p = dur(tpes.filter((t) => t.principal === principal))
-  if (p.length) return { dias: Math.round(p.reduce((a, b) => a + b, 0) / p.length), n: p.length, base: 'principal' }
+/**
+ * Prazo sugerido para uma nova TPE: média de HORAS por TPE do mesmo principal+grupo (ou do principal),
+ * a mesma regra do indicador "Méd./TPE" — as revisões (.1, .2…) somam na TPE original e contam uma vez —,
+ * convertida em dias úteis pelas horas de trabalho de um dia (ex.: 119,5 h ÷ 8,8 h/dia ≈ 14 dias úteis).
+ */
+export function prazoMedioGrupo(tpes: any[], principal: string, grupo: string, horasPorDia: number):
+  { dias: number; horas: number; n: number; base: 'grupo' | 'principal' } | null {
+  const raiz = (c: string) => String(c).replace(/\.\d+$/, '')
+  const media = (ts: any[]) => {
+    const porTarefa = new Map<string, number>()
+    for (const t of ts) porTarefa.set(raiz(t.codigo), (porTarefa.get(raiz(t.codigo)) ?? 0) + Number(t.horas_totais ?? 0))
+    const hs = [...porTarefa.values()].filter((h) => h > 0)
+    return hs.length ? { horas: hs.reduce((a, b) => a + b, 0) / hs.length, n: hs.length } : null
+  }
+  const hd = horasPorDia > 0 ? horasPorDia : 8.8
+  const g = media(tpes.filter((t) => t.principal === principal && t.grupo === grupo))
+  if (g) return { ...g, dias: Math.max(1, Math.ceil(g.horas / hd - 1e-9)), base: 'grupo' }
+  const p = media(tpes.filter((t) => t.principal === principal))
+  if (p) return { ...p, dias: Math.max(1, Math.ceil(p.horas / hd - 1e-9)), base: 'principal' }
   return null
 }
 

@@ -349,3 +349,12 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 .gantt-legenda .lg.ferias { background: repeating-linear-gradient(135deg, rgba(213,149,8,.35) 0 3px, rgba(213,149,8,.08) 3px 7px); }
 .aviso-os { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 2px 8px; border-radius: 6px; background: var(--ambar-50); color: var(--ambar); font-weight: 600; }
 .cal-ferias { font-size: .66rem; font-weight: 600; color: #8a5f00; background: var(--dourado-50); border-left: 3px solid; border-radius: 3px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Indicadores: cores dos projetistas, degradê de alocação e barrinhas de participação */
+.ind-proj { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; white-space: nowrap; }
+.ind-pct { display: grid; gap: 3px; justify-items: end; min-width: 72px; }
+.ind-pct .barra { width: 100%; height: 5px; }
+.ind-he { color: var(--ambar); font-weight: 600; }
+.ind-legenda { align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ind-degrade { width: 120px; height: 8px; border-radius: 99px; background: linear-gradient(90deg, hsl(0 62% 42%), hsl(60 62% 42%), hsl(120 62% 42%)); }
+.ind-custo { display: flex; height: 10px; border-radius: 99px; overflow: hidden; margin: 12px 0 6px; background: var(--cinza-100); }

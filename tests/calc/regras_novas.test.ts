@@ -38,6 +38,8 @@ describe('Média por TPE com revisões', () => {
     expect(k.porRecurso[0].tpes_atendidos).toBe(2)
     expect(k.porOS[0].horas_por_tpe).toBe(4)
     expect(k.resumo.horas).toBe(8) // totais não mudam
+    expect(k.resumo.tpes).toBe(2) // a revisão não conta como outra TPE
+    expect(k.porGrupo.reduce((s, g) => s + g.qtd_tpes, 0)).toBe(2)
     expect(k.resumo.reaberturas).toBe(1) // reabertura continua contada
   })
   it('modo VER_035 (reconciliação): cada revisão é uma TPE', () => {

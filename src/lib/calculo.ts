@@ -97,6 +97,11 @@ function addDias(d: string, n: number): string {
   const x = new Date(Date.UTC(a, m - 1, dd + n))
   return x.toISOString().slice(0, 10)
 }
+/** Horas de trabalho de um dia útil médio (seg–qui 9 h, sex 8 h, sem almoço → 8,8 h). */
+export function horasPorDiaUtil(p: Parametros): number {
+  const almoco = (min(p.almoco_fim) - min(p.almoco_inicio)) / 60
+  return ((p.jornada_seg_qui_min / 60 - almoco) * 4 + (p.jornada_sex_min / 60 - almoco)) / 5
+}
 /** Horas disponíveis de UMA pessoa entre duas datas: dias úteis × 9 h (seg–qui) / 8 h (sex). */
 export function capacidade(ini: string, fim: string, p: Parametros, feriados: Set<string>): number {
   if (fim < ini) return 0
@@ -162,6 +167,12 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
   /** horas de cada tarefa distinta (TPE original + revisões, quando agrupado) dentro do conjunto */
   const horasPorTarefa = (ts: LinhaTPE[]) => [...new Set(ts.map((t) => chave(t.codigo)))].map((k) => porTpe.get(k)?.h ?? 0)
   const qtdTarefas = (ts: LinhaTPE[]) => new Set(ts.map((t) => chave(t.codigo))).size
+  /** a TPE (com as revisões) só conta como finalizada se nenhuma revisão dela estiver aberta */
+  const qtdFinalizadas = (ts: LinhaTPE[]) => {
+    const aberta = new Map<string, boolean>()
+    for (const t of ts) aberta.set(chave(t.codigo), (aberta.get(chave(t.codigo)) ?? false) || t.status !== 'FINALIZADA')
+    return [...aberta.values()].filter((x) => !x).length
+  }
   // horas do próprio registro (sem somar revisões): usadas em totais, que não podem contar duas vezes
   const hReg = new Map<string, number>(), heReg = new Map<string, number>()
   for (const a of aps) {
@@ -180,8 +191,8 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
   const ctot = soma(aps.map((a) => a.custo_total ?? 0))
 
   const resumo = {
-    inicio: ini, fim, tpes: tpes.length, finalizados: tpes.filter((t) => t.status === 'FINALIZADA').length,
-    abertos: tpes.filter((t) => t.status !== 'FINALIZADA').length, reaberturas: reab, indice_reabertura: div(reab, tpes.length - reab),
+    inicio: ini, fim, tpes: qtdTarefas(tpes), finalizados: qtdFinalizadas(tpes),
+    abertos: qtdTarefas(tpes) - qtdFinalizadas(tpes), reaberturas: reab, indice_reabertura: div(reab, tpes.length - reab),
     os_atendidas: osAtendidas.size, horas, horas_normais: hn, horas_extras: he, pct_he: div(he, horas),
     tempo_medio_tpe: media(comHoras), tempo_medio_os: div(horas, osAtendidas.size), prazo_medio: media(prazos),
     os_clientes: [...osAtendidas].filter((o) => o >= p.os_interna_limite).length,
@@ -196,7 +207,7 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
   const linhaDim = (k: string, ts: LinhaTPE[]) => {
     const h = soma(ts.map(hR)), hx = soma(ts.map(heR)), ht = horasPorTarefa(ts)
     const qOS = new Set(ts.map((t) => t.os)).size, rb = ts.filter((t) => t.revisao !== 0).length
-    return { chave: k, os_atendidas: qOS, qtd_tpes: ts.length, finalizados: ts.filter((t) => t.status === 'FINALIZADA').length,
+    return { chave: k, os_atendidas: qOS, qtd_tpes: qtdTarefas(ts), finalizados: qtdFinalizadas(ts),
       horas: h, horas_extras: hx, tempo_medio_os: div(h, qOS), tempo_medio_tpe: media(ht.filter((x) => x > 0)),
       reaberturas: rb, indice_reabertura: div(rb, ts.length - rb), pct_horas: div(h, horas),
       prazo_medio: media(ts.filter((t) => t.data_inicio && t.data_fim).map((t) => diasCorridos(t.data_inicio!, t.data_fim!))),
@@ -245,7 +256,7 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
     const ds = as.map((a) => a.dia).sort()
     const h = soma(ts.map(hR))
     return { os, cliente: osMap.get(os)?.nome ?? '', nivel: osMap.get(os)?.nivel ?? '', vendedor: osMap.get(os)?.vendedor ?? '',
-      classificacao: osMap.get(os)?.classificacao ?? '', qtd_tpes: ts.length, horas: h,
+      classificacao: osMap.get(os)?.classificacao ?? '', qtd_tpes: qtdTarefas(ts), horas: h,
       horas_extras: soma(ts.map(heR)), horas_por_tpe: div(h, qtdTarefas(ts)),
       primeiro: ds[0] ?? null, ultimo: ds[ds.length - 1] ?? null, pct_horas: div(h, horas), custo: soma(as.map((a) => a.custo_total ?? 0)) }
   }).sort((a, b) => b.horas - a.horas)

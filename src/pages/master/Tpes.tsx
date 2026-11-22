@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
-import { situacaoPrazo } from '../../lib/dados'
+import { paraParametros, situacaoPrazo } from '../../lib/dados'
+import { horasPorDiaUtil } from '../../lib/calculo'
 import { linhasDe } from '../../lib/conjuntos'
 import { dataBR, h1, hojeISO, osBR, pct } from '../../lib/formato'
 import { diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoDiaUtil, proximoNumeroTpe } from '../../lib/agenda'
@@ -84,7 +85,8 @@ export default function Tpes() {
   const comResponsavel = (e: any, responsavel_id: string) => (e.dias && e.data_inicio ? comDias({ ...e, responsavel_id }, e.dias) : { ...e, responsavel_id })
   const comPrazo = (e: any, prazo: string) => ({ ...e, prazo, dias: diasDe(e.data_inicio, prazo, e.responsavel_id) })
 
-  const sugestao = ed && base && ed.principal && ed.grupo ? prazoMedioGrupo(base.tpes, ed.principal, ed.grupo, base.feriados) : null
+  const horasDia = useMemo(() => (base ? horasPorDiaUtil(paraParametros(base.parametros)) : 8.8), [base])
+  const sugestao = ed && base && ed.principal && ed.grupo ? prazoMedioGrupo(base.tpes, ed.principal, ed.grupo, horasDia) : null
   const porId = useMemo(() => new Map((base?.tpes ?? []).map((t: any) => [t.id, t])), [base])
   const pred: any = ed?.predecessora_id ? porId.get(Number(ed.predecessora_id)) : null
   // opções de predecessora: qualquer TPE existente, exceto ela mesma e as que já dependem dela (evita ciclo)
@@ -254,11 +256,12 @@ export default function Tpes() {
             {sugestao && (
               <div className="sugestao-prazo small">
                 <Icone n="grafico" t={16} />
-                <span>Prazo médio de <strong>{sugestao.n}</strong> TPE(s) finalizada(s) {sugestao.base === 'grupo' ? `de ${ed.principal} › ${ed.grupo}` : `de ${ed.principal} (sem histórico do grupo)`}: <strong>{sugestao.dias} {sugestao.dias === 1 ? 'dia útil' : 'dias úteis'}</strong>
+                <span title="Mesma média do indicador Méd./TPE (revisões somadas à TPE original), dividida pelas horas de um dia útil">
+                  Média de <strong>{h1(sugestao.horas)} h</strong> por TPE em <strong>{sugestao.n}</strong> TPE(s) {sugestao.base === 'grupo' ? `de ${ed.principal} › ${ed.grupo}` : `de ${ed.principal} (sem histórico do grupo)`} ÷ {h1(horasDia)} h/dia ≈ <strong>{sugestao.dias} {sugestao.dias === 1 ? 'dia útil' : 'dias úteis'}</strong>
                   {ed.data_inicio && <> → prazo em <strong>{dataBR(fimPorDiasUteis(ed.data_inicio, sugestao.dias, cal(ed.responsavel_id)))}</strong></>}.</span>
                 {ed.data_inicio && String(sugestao.dias) !== String(ed.dias) && <button type="button" className="btn sec pequeno" onClick={() => setEd(comDias(ed, String(sugestao.dias)))}>Usar este prazo</button>}
               </div>)}
-            {ed.principal && ed.grupo && !sugestao && <p className="muted small" style={{ margin: 0 }}>Ainda não há TPEs finalizadas deste grupo para sugerir um prazo médio.</p>}
+            {ed.principal && ed.grupo && !sugestao && <p className="muted small" style={{ margin: 0 }}>Ainda não há horas apontadas em TPEs deste grupo para sugerir um prazo médio.</p>}
             <Campo rotulo="Instruções ao projetista" ajuda="Aparecem na tela “Minhas tarefas”."><textarea rows={2} maxLength={1000} value={ed.instrucoes} onChange={(e) => setEd({ ...ed, instrucoes: e.target.value })} /></Campo>
             <div className="row" style={{ justifyContent: 'flex-end' }}>
               <button className="btn sec" onClick={() => setEd(null)}>Cancelar</button>
