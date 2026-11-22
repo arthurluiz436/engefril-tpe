@@ -8,6 +8,10 @@ const chave = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 export const configurado = Boolean(url && chave)
 
+/** Projeto Supabase de TESTE (engefril-tpe-teste): quando o site aponta para ele, mostra a faixa de ambiente de teste. */
+const REF_TESTE = 'auznvavvompcrijlpfqd'
+export const ambienteTeste = !!url && url.includes(REF_TESTE)
+
 function papelDaChave(k: string): string {
   if (k.startsWith('sb_secret_')) return 'service_role'
   try { return JSON.parse(atob((k.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/'))).role ?? '' } catch { return '' }

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { supabase, mensagemErro } from '../lib/supabase'
+import { FaixaTeste } from '../components/Layout'
+import { supabase, mensagemErro, ambienteTeste } from '../lib/supabase'
 import { Aviso, Campo } from '../components/ui'
 import logoGrafite from '../assets/logo-grafite.png'
 import logoBranco from '../assets/logo-branco.png'
@@ -27,6 +28,7 @@ export default function Login() {
   }
 
   return (
+    <>{ambienteTeste && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50 }}><FaixaTeste /></div>}
     <div className="login">
       <div className="lado">
         <img src={logoBranco} alt="Engefril" style={{ width: 190 }} />
@@ -54,6 +56,6 @@ export default function Login() {
           <p className="muted small" style={{ margin: 0 }}>Não há cadastro aberto: o acesso é criado por convite do Supervisor.</p>
         </form>
       </div>
-    </div>
+    </div></>
   )
 }

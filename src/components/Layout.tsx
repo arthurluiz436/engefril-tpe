@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { ambienteTeste } from '../lib/supabase'
 import { Icone } from './ui'
 import logoBranco from '../assets/logo-branco.png'
 
@@ -38,6 +39,14 @@ const MENU_MASTER: { grupo: string; itens: { to: string; n: string; t: string }[
   ] },
 ]
 
+/** Faixa fixa que deixa claro que o site está ligado ao banco de TESTE. */
+export function FaixaTeste() {
+  return (
+    <div className="faixa-teste" role="note">
+      <strong>AMBIENTE DE TESTE</strong> — os dados daqui não são os oficiais. Pode mexer à vontade.
+    </div>)
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { perfil, sair } = useAuth()
   const [aberta, setAberta] = useState(false)
@@ -63,10 +72,14 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="rodape">
           <div style={{ color: '#fff', fontWeight: 600 }}>{perfil?.nome || perfil?.email}</div>
           <div style={{ color: '#9aa3ad', marginBottom: 10 }}>{master ? 'Supervisor' : 'Projetista'}{perfil?.recurso_nome ? ` · ${perfil.recurso_nome}` : ''}</div>
+          {ambienteTeste && <div className="selo-teste">Teste</div>}
           <button className="btn sec pequeno" onClick={sair}><Icone n="sair" /> Sair</button>
         </div>
       </aside>
-      <main className="conteudo" id="conteudo" key={loc.pathname}>{children}</main>
+      <main className="conteudo" id="conteudo" key={loc.pathname}>
+        {ambienteTeste && <FaixaTeste />}
+        {children}
+      </main>
     </div>
   )
 }

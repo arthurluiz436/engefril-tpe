@@ -394,3 +394,10 @@ th.num .th-ordem { justify-content: flex-end; }
 .inicio-manual { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 6px; }
 .inicio-manual > span:first-child { font-weight: 600; color: var(--grafite-900); }
 .inicio-manual input[type='date'] { width: auto; min-height: 30px; padding: 3px 8px; font-size: .82rem; }
+
+/* Ambiente de teste: faixa laranja fixa no topo */
+.faixa-teste { position: sticky; top: 0; z-index: 30; margin: -26px calc(-1 * clamp(20px, 2.2vw, 40px)) 18px; padding: 8px 16px; text-align: center;
+  background: repeating-linear-gradient(135deg, #e8590c 0 14px, #f76707 14px 28px); color: #fff; font-size: .85rem; letter-spacing: .02em; }
+.selo-teste { display: inline-block; margin-bottom: 10px; padding: 2px 10px; border-radius: 99px; background: #f76707; color: #fff; font-weight: 700; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 900px) { .faixa-teste { margin: -18px -14px 14px; } }
+@media print { .faixa-teste, .selo-teste { display: none; } }
