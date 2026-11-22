@@ -17,7 +17,7 @@ if (chave && papelDaChave(chave) === 'service_role') {
   throw new Error('Configuração insegura: a chave service_role não pode ser usada no navegador.')
 }
 
-export const supabase: SupabaseClient = createClient(url ?? 'http://localhost', chave ?? 'chave-ausente', {
+export const supabase: SupabaseClient = createClient(url || 'http://localhost', chave || 'chave-ausente', {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
 })
 
