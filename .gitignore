@@ -13,3 +13,10 @@ node_modules/
 dist/
 dist-demo/
 *.log
+
+# Sistema / editor
+desktop.ini
+Thumbs.db
+.DS_Store
+.vscode/
+.claude/settings.local.json
