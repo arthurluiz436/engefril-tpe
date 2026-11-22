@@ -18,6 +18,7 @@ const Indicadores = lazy(() => import('./pages/master/Indicadores'))
 const CentralDados = lazy(() => import('./pages/master/CentralDados'))
 const Tpes = lazy(() => import('./pages/master/Tpes'))
 const Sequencias = lazy(() => import('./pages/master/Sequencias'))
+const Cronograma = lazy(() => import('./pages/master/Cronograma'))
 const OrdensServico = lazy(() => import('./pages/master/OrdensServico'))
 const ApontamentosMaster = lazy(() => import('./pages/master/ApontamentosMaster'))
 const Importar = lazy(() => import('./pages/master/Importar'))
@@ -56,6 +57,7 @@ function Rotas() {
             <Route path="dados" element={<CentralDados />} />
             <Route path="tpes" element={<Tpes />} />
             <Route path="sequencias" element={<Sequencias />} />
+            <Route path="cronograma" element={<Cronograma />} />
             <Route path="os" element={<OrdensServico />} />
             <Route path="apontamentos" element={<ApontamentosMaster />} />
             <Route path="importar" element={<Importar />} />

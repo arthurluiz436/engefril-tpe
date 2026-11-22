@@ -4,12 +4,15 @@ import { DEFINICOES, indicadores } from '../../lib/calculo'
 import { paraParametros } from '../../lib/dados'
 import { dataBR, h1, int, mesBR, osBR, pct, reais, reais0 } from '../../lib/formato'
 import { Cabecalho, Carregando } from '../../components/ui'
+import { filtrarPeriodo, SeletorPeriodo, textoPeriodo, usePeriodo } from '../../components/Periodo'
 
 export default function Indicadores() {
   const { base } = useBase()
   const recursos = useMemo(() => (base?.recursos ?? []).map((r: any) => r.nome as string), [base])
-  const k = useMemo(() => base && indicadores(base.aps, base.tpes, base.os, recursos, paraParametros(base.parametros), base.feriados), [base, recursos])
-  if (!k) return <Carregando />
+  const [periodo, setPeriodo] = usePeriodo(base)
+  const recorte = useMemo(() => (base ? filtrarPeriodo(base, periodo) : null), [base, periodo])
+  const k = useMemo(() => recorte && indicadores(recorte.aps, recorte.tpes, recorte.os, recursos, paraParametros(recorte.parametros), recorte.feriados), [recorte, recursos])
+  if (!k || !base || !periodo) return <Carregando />
   const r = k.resumo
   const Dim = ({ titulo, linhas, chave }: { titulo: string; linhas: any[]; chave: string }) => (
     <div className="card"><h2>{titulo}</h2>
@@ -19,8 +22,9 @@ export default function Indicadores() {
   )
   return (
     <div className="stack">
-      <Cabecalho titulo="Indicadores" texto={`Mesmos blocos da aba KPI da planilha VER_035, calculados sobre a base atual. Período: ${dataBR(r.inicio)} a ${dataBR(r.fim)}. Passe o mouse no nome para ver a definição.`}
+      <Cabecalho titulo="Indicadores" texto={`Mesmos blocos da aba KPI da planilha VER_035. Período: ${textoPeriodo(periodo)}${r.inicio ? ` (apontamentos de ${dataBR(r.inicio)} a ${dataBR(r.fim)})` : " — sem apontamentos no período"}. Passe o mouse no nome para ver a definição.`}
         acoes={<button className="btn sec" onClick={() => window.print()}>Imprimir / PDF</button>} />
+      <SeletorPeriodo periodo={periodo} aoMudar={setPeriodo} base={base} />
       <div className="card"><h2>1. Resumo geral</h2>
         <table className="tabela"><tbody>{([
           ['TPEs cadastrados / finalizados / em aberto', `${r.tpes} / ${r.finalizados} / ${r.abertos}`, null],

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CAMPOS, lerPlanilha, sha256Hex, validarArquivo, type Leitura, type MapaAba } from '../../lib/importador'
+import { baixarModelo } from '../../lib/modeloImportacao'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { useBase } from '../../lib/base'
 import { dataHoraBR, int } from '../../lib/formato'
@@ -88,7 +89,8 @@ export default function Importar() {
   return (
     <div className="stack">
       {elemento}
-      <Cabecalho titulo="Importar planilha antiga" texto="Envie o arquivo; você poderá conferir o mapeamento e a prévia antes de salvar. A leitura acontece no seu navegador e a gravação só é feita após sua confirmação, numa função protegida do servidor." />
+      <Cabecalho titulo="Importar planilha" texto="Envie o arquivo; você poderá conferir o mapeamento e a prévia antes de salvar. A leitura acontece no seu navegador e a gravação só é feita após sua confirmação, numa função protegida do servidor. Para montar uma planilha nova, use o modelo com as abas de clientes/O.S., TPEs, apontamentos e parâmetros."
+        acoes={<button className="btn sec" onClick={() => baixarModelo().catch((e) => avisar("erro", mensagemErro(e)))}><Icone n="exportar" /> Baixar modelo de planilha</button>} />
       <ol className="passos">{['Arquivo', 'Mapeamento', 'Prévia e conflitos', 'Resultado'].map((p, i) =>
         <li key={p} className={passo === i + 1 ? 'atual' : passo > i + 1 ? 'feito' : ''}><span className="n">{passo > i + 1 ? '✓' : i + 1}</span>{p}</li>)}</ol>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

@@ -19,6 +19,7 @@ const MENU_MASTER: { grupo: string; itens: { to: string; n: string; t: string }[
   { grupo: 'Planejamento', itens: [
     { to: '/master/tpes', n: 'tpe', t: 'TPEs e tarefas' },
     { to: '/master/sequencias', n: 'sequencia', t: 'Sequência por projetista' },
+    { to: '/master/cronograma', n: 'grafico', t: 'Cronograma da equipe' },
     { to: '/master/os', n: 'clientes', t: 'Clientes e O.S.' },
     { to: '/master/apontamentos', n: 'relogio', t: 'Apontamentos' },
   ] },

@@ -5,6 +5,8 @@ export interface Tarefa {
   tpe_id: number; codigo: string; os: number; cliente: string | null; cidade: string | null; uf: string | null
   principal: string; grupo: string; descricao: string; instrucoes: string | null; status: string
   sequencia: number | null; prazo: string | null; data_inicio: string | null; horas_apontadas: number; ultimo_apontamento: string | null
+  /** só com a migração 0007 */
+  predecessora_codigo?: string | null; predecessora_liberada?: boolean | null
 }
 
 export async function minhasTarefas(): Promise<Tarefa[]> {
@@ -52,3 +54,6 @@ export function paraParametros(p: any) {
     os_interna_limite: Number(p?.os_interna_limite ?? 1000),
   }
 }
+
+/** TPE esperando a predecessora ser iniciada (o projetista ainda não pode apontar nela). */
+export const aguardandoPredecessora = (t: Pick<Tarefa, 'predecessora_codigo' | 'predecessora_liberada'>) => !!t.predecessora_codigo && t.predecessora_liberada === false

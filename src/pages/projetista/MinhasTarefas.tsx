@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
+import { aguardandoPredecessora, minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
 import { mensagemErro } from '../../lib/supabase'
 import { dataBR, hm, osBR } from '../../lib/formato'
 import { Aviso, Cabecalho, Carregando, Selo, SeloPrazo, Vazio } from '../../components/ui'
@@ -43,6 +43,7 @@ export default function MinhasTarefas() {
                   <div className="row" style={{ gap: 8 }}>
                     <strong>{t.codigo}</strong><span className="muted">·</span><span>{t.principal} › {t.grupo}</span>
                     {t === primeiraAberta && <span className="badge dourado">Próxima</span>}
+                    {aguardandoPredecessora(t) && <span className="badge aguardando" title="Você poderá apontar quando a TPE anterior for iniciada">⏳ aguardando {t.predecessora_codigo}</span>}
                   </div>
                   <div style={{ margin: '4px 0' }}>{t.descricao || <span className="muted">Sem descrição</span>}</div>
                   <div className="row small muted" style={{ gap: 14 }}>
@@ -55,7 +56,7 @@ export default function MinhasTarefas() {
                 </div>
                 <div className="stack" style={{ gap: 8, justifyItems: 'end' }}>
                   <div className="row" style={{ gap: 6 }}><Selo v={t.status} /><SeloPrazo prazo={t.prazo} status={t.status} /></div>
-                  {t.status !== 'FINALIZADA' && <Link className="btn pequeno" to={`/registrar?tpe=${t.tpe_id}`}>Registrar</Link>}
+                  {t.status !== 'FINALIZADA' && !aguardandoPredecessora(t) && <Link className="btn pequeno" to={`/registrar?tpe=${t.tpe_id}`}>Registrar</Link>}
                 </div>
               </div>
             )

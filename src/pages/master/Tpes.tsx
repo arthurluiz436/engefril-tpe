@@ -5,9 +5,16 @@ import { supabase, mensagemErro } from '../../lib/supabase'
 import { situacaoPrazo } from '../../lib/dados'
 import { linhasDe } from '../../lib/conjuntos'
 import { dataBR, h1, hojeISO, osBR, pct } from '../../lib/formato'
+import { diasUteisEntre, fimPorDiasUteis, prazoMedioGrupo, proximoDiaUtil, proximoNumeroTpe } from '../../lib/agenda'
 import { Aviso, Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, SeloPrazo, Vazio, useAvisar, useConfirmar } from '../../components/ui'
 
 const STATUS = ['NÃO INICIADA', 'EM ANDAMENTO', 'PAUSADA', 'FINALIZADA']
+const FILTROS = [
+  ['abertas', 'Em aberto'], ['atrasadas', 'Atrasadas'], ['NÃO INICIADA', 'Não iniciadas'], ['EM ANDAMENTO', 'Em andamento'],
+  ['PAUSADA', 'Pausadas'], ['FINALIZADA', 'Finalizadas'], ['todas', 'Todas'],
+] as const
+type Filtro = (typeof FILTROS)[number][0]
+const iniciada = (t: any) => t && (t.status !== 'NÃO INICIADA' || Number(t.qtd_apontamentos ?? 0) > 0)
 
 export default function Tpes() {
   const { base, recarregar } = useBase()
@@ -15,21 +22,27 @@ export default function Tpes() {
   const { confirmar, elemento } = useConfirmar()
   const [qs, setQs] = useSearchParams()
   const [busca, setBusca] = useState('')
-  const [fStatus, setFStatus] = useState('abertas')
+  const [fStatus, setFStatus] = useState<Filtro>('abertas')
   const [fResp, setFResp] = useState('')
   const [catalogo, setCatalogo] = useState<any[]>([])
   const [ed, setEd] = useState<any | null>(null)
   const [salvando, setSalvando] = useState(false)
   const filtro = qs.get('f')
+  // a coluna predecessora_id só existe depois da migração 0007
+  const temPred = !!base?.tpes.length && 'predecessora_id' in base.tpes[0]
 
   useEffect(() => { supabase.from('catalogo_grupos').select('*').order('ordem').then(({ data }) => setCatalogo(data ?? [])) }, [])
-  useEffect(() => { if (qs.get('novo')) { novo(); qs.delete('novo'); setQs(qs) } }, [base]) // eslint-disable-line
+  useEffect(() => {
+    if (!base) return
+    if (qs.get('novo')) { novo(); qs.delete('novo'); setQs(qs) }
+    const idEd = qs.get('editar')
+    if (idEd) { const t = linhasDe('tpes', base).find((x: any) => String(x.id) === idEd); if (t) editar(t); qs.delete('editar'); setQs(qs) }
+  }, [base]) // eslint-disable-line
 
-  const linhas = useMemo(() => {
-    if (!base) return []
+  const { linhas, contagem } = useMemo(() => {
+    const vazio = Object.fromEntries(FILTROS.map(([k]) => [k, 0])) as Record<Filtro, number>
+    if (!base) return { linhas: [], contagem: vazio }
     let ls: any[] = linhasDe('tpes', base).filter((t: any) => t.arquivada !== 'SIM')
-    if (fStatus === 'abertas') ls = ls.filter((t) => t.status !== 'FINALIZADA')
-    else if (fStatus) ls = ls.filter((t) => t.status === fStatus)
     if (fResp === '-') ls = ls.filter((t) => !t.responsavel_id); else if (fResp) ls = ls.filter((t) => String(t.responsavel_id) === fResp)
     if (filtro === 'semresp') ls = ls.filter((t) => !t.responsavel_id && t.status !== 'FINALIZADA')
     if (filtro === 'atrasadas') ls = ls.filter((t) => t.situacao_prazo === 'ATRASADA')
@@ -37,35 +50,68 @@ export default function Tpes() {
     if (filtro === 'semprazo') ls = ls.filter((t) => t.responsavel_id && !t.prazo && t.status !== 'FINALIZADA')
     const b = busca.toLowerCase()
     if (b) ls = ls.filter((t) => `${t.codigo} ${t.cliente} ${t.descricao} ${t.grupo} ${t.os} ${osBR(t.os)} ${t.responsavel}`.toLowerCase().includes(b))
-    return ls.sort((a, z) => z.numero - a.numero || z.revisao - a.revisao)
+    const passa = (t: any, f: Filtro) => f === 'todas' || (f === 'abertas' ? t.status !== 'FINALIZADA' : f === 'atrasadas' ? t.situacao_prazo === 'ATRASADA' : t.status === f)
+    const contagem = { ...vazio }
+    for (const [k] of FILTROS) contagem[k] = ls.filter((t) => passa(t, k)).length
+    const linhas = ls.filter((t) => passa(t, fStatus)).sort((a, z) => z.numero - a.numero || z.revisao - a.revisao)
+    return { linhas, contagem }
   }, [base, busca, fStatus, fResp, filtro])
 
+  /** Próximo código: reaproveita o menor número livre (ex.: apagou a TPE-002 → a próxima é a 002). */
   function proximoCodigo() {
-    const max = Math.max(0, ...(base?.tpes ?? []).map((t: any) => t.numero))
-    return `TPE-${String(max + 1).padStart(3, '0')}.0`
+    return `TPE-${String(proximoNumeroTpe((base?.tpes ?? []).map((t: any) => Number(t.numero)))).padStart(3, '0')}.0`
   }
-  function novo() { setEd({ novo: true, codigo: proximoCodigo(), os: '', principal: '', grupo: '', descricao: '', status: 'NÃO INICIADA', data_inicio: hojeISO(), data_fim: '', prazo: '', instrucoes: '', responsavel_id: '', sequencia: '' }) }
-  function editar(t: any) { setEd({ ...t, data_inicio: t.data_inicio ?? '', data_fim: t.data_fim ?? '', prazo: t.prazo ?? '', instrucoes: t.instrucoes ?? '', responsavel_id: t.responsavel_id ?? '', sequencia: t.sequencia ?? '', resp_original: t.responsavel_id ?? '' }) }
+  const diasDe = (a?: string | null, b?: string | null) => (a && b && b >= a ? String(diasUteisEntre(String(a).slice(0, 10), String(b).slice(0, 10), base?.feriados)) : '')
+  function novo() {
+    setEd({ novo: true, codigo: proximoCodigo(), os: '', principal: '', grupo: '', descricao: '', status: 'NÃO INICIADA', data_inicio: proximoDiaUtil(hojeISO(), base?.feriados),
+      data_fim: '', prazo: '', dias: '', instrucoes: '', responsavel_id: '', predecessora_id: '' })
+  }
+  function editar(t: any) {
+    setEd({ ...t, data_inicio: t.data_inicio ?? '', data_fim: t.data_fim ?? '', prazo: t.prazo ?? '', dias: diasDe(t.data_inicio, t.prazo), instrucoes: t.instrucoes ?? '',
+      responsavel_id: t.responsavel_id ?? '', resp_original: t.responsavel_id ?? '', predecessora_id: t.predecessora_id ?? '', status_original: t.status })
+  }
   function reabrir(t: any) {
     const revs = (base?.tpes ?? []).filter((x: any) => x.numero === t.numero).map((x: any) => x.revisao)
     setEd({ novo: true, reabertura: t.codigo, codigo: `TPE-${String(t.numero).padStart(3, '0')}.${Math.max(...revs) + 1}`, os: t.os, principal: t.principal, grupo: t.grupo,
-      descricao: '', status: 'EM ANDAMENTO', data_inicio: hojeISO(), data_fim: '', prazo: '', instrucoes: '', responsavel_id: t.responsavel_id ?? '', sequencia: '' })
+      descricao: '', status: 'EM ANDAMENTO', data_inicio: hojeISO(), data_fim: '', prazo: '', dias: '', instrucoes: '', responsavel_id: t.responsavel_id ?? '', predecessora_id: '' })
   }
+  // duração ↔ prazo (dias úteis, sem sábados, domingos e feriados)
+  const comDias = (e: any, dias: string) => ({ ...e, dias, prazo: e.data_inicio && Number(dias) > 0 ? fimPorDiasUteis(e.data_inicio, Number(dias), base?.feriados) : e.prazo })
+  const comInicio = (e: any, data_inicio: string) => (e.dias && data_inicio ? comDias({ ...e, data_inicio }, e.dias) : { ...e, data_inicio, dias: diasDe(data_inicio, e.prazo) })
+  const comPrazo = (e: any, prazo: string) => ({ ...e, prazo, dias: diasDe(e.data_inicio, prazo) })
+
+  const sugestao = ed && base && ed.principal && ed.grupo ? prazoMedioGrupo(base.tpes, ed.principal, ed.grupo, base.feriados) : null
+  const porId = useMemo(() => new Map((base?.tpes ?? []).map((t: any) => [t.id, t])), [base])
+  const pred: any = ed?.predecessora_id ? porId.get(Number(ed.predecessora_id)) : null
+  // opções de predecessora: qualquer TPE existente, exceto ela mesma e as que já dependem dela (evita ciclo)
+  const opcoesPred = useMemo(() => {
+    if (!base || !ed) return []
+    const bloqueadas = new Set<number>()
+    if (ed.id) {
+      const fila = [ed.id]
+      while (fila.length) { const x = fila.pop(); bloqueadas.add(x); for (const t of base.tpes) if (t.predecessora_id === x && !bloqueadas.has(t.id)) fila.push(t.id) }
+    }
+    return base.tpes.filter((t: any) => !t.arquivada && !bloqueadas.has(t.id)).sort((a: any, z: any) => z.numero - a.numero || z.revisao - a.revisao)
+  }, [base, ed?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const erros = ed ? {
     os: !ed.os ? 'Escolha a O.S.' : null,
     grupo: !ed.principal || !ed.grupo ? 'Escolha principal e grupo.' : null,
     descricao: (ed.descricao ?? '').trim().length < 5 ? 'Descreva a tarefa (mín. 5 caracteres).' : null,
-    data_fim: ed.status === 'FINALIZADA' && !ed.data_fim ? 'Informe a data de finalização.' : ed.data_fim && ed.data_inicio && ed.data_fim < ed.data_inicio ? 'Anterior ao início.' : null,
+    data_fim: !ed.novo && ed.status === 'FINALIZADA' && !ed.data_fim ? 'Informe a data de finalização.' : ed.data_fim && ed.data_inicio && ed.data_fim < ed.data_inicio ? 'Anterior ao início.' : null,
     prazo: ed.prazo && ed.data_inicio && ed.prazo < ed.data_inicio ? 'Prazo anterior ao início.' : null,
+    dias: ed.dias !== '' && !(Number(ed.dias) >= 1) ? 'Informe 1 dia ou mais.' : null,
+    status: pred && ed.status !== 'NÃO INICIADA' && ed.status !== ed.status_original && !iniciada(pred) ? `A predecessora ${pred.codigo} ainda não foi iniciada.` : null,
   } : {}
   const valido = ed && !Object.values(erros).some(Boolean)
 
   async function salvar() {
     setSalvando(true)
     try {
+      if (ed.predecessora_id && !temPred) throw new Error('Para usar predecessora, aplique a migração 20261122000007 no Supabase.')
       const reg = { os: Number(ed.os), principal: ed.principal, grupo: ed.grupo, descricao: ed.descricao.trim(), status: ed.status,
-        data_inicio: ed.data_inicio || null, data_fim: ed.data_fim || null, prazo: ed.prazo || null, instrucoes: ed.instrucoes?.trim() || null }
+        data_inicio: ed.data_inicio || null, data_fim: ed.novo ? null : ed.data_fim || null, prazo: ed.prazo || null, instrucoes: ed.instrucoes?.trim() || null,
+        ...(temPred ? { predecessora_id: ed.predecessora_id ? Number(ed.predecessora_id) : null } : {}) }
       let id = ed.id
       if (ed.novo) {
         const { data, error } = await supabase.from('tpes').insert({ ...reg, codigo: ed.codigo, grupo_original: ed.grupo }).select('id').single()
@@ -74,7 +120,8 @@ export default function Tpes() {
         const { error } = await supabase.from('tpes').update(reg).eq('id', id); if (error) throw error
       }
       if (String(ed.responsavel_id) !== String(ed.resp_original ?? '') || (ed.novo && ed.responsavel_id)) {
-        const { error } = await supabase.rpc('atribuir_tpe', { p_tpe: id, p_recurso: ed.responsavel_id ? Number(ed.responsavel_id) : null, p_sequencia: ed.sequencia ? Number(ed.sequencia) : null, p_obs: ed.reabertura ? `Reabertura de ${ed.reabertura}` : null })
+        // entra no fim da fila do projetista; a ordem é definida em Planejamento › Sequência por projetista
+        const { error } = await supabase.rpc('atribuir_tpe', { p_tpe: id, p_recurso: ed.responsavel_id ? Number(ed.responsavel_id) : null, p_sequencia: null, p_obs: ed.reabertura ? `Reabertura de ${ed.reabertura}` : null })
         if (error) throw error
       }
       avisar('ok', `${ed.codigo} salva.`); setEd(null); recarregar()
@@ -96,42 +143,61 @@ export default function Tpes() {
     const { error } = await supabase.from('tpes').update({ arquivada: true }).eq('id', t.id)
     avisar(error ? 'erro' : 'ok', error ? mensagemErro(error) : 'TPE arquivada.'); recarregar()
   }
+  async function apagar(t: any) {
+    // conferências rápidas antes de pedir confirmação (o banco confere de novo)
+    const revisoes = (base?.tpes ?? []).filter((x: any) => x.numero === t.numero && x.id !== t.id)
+    if (t.revisao === 0 && revisoes.length) return avisar('erro', `A TPE ${t.codigo} não pode ser apagada porque tem revisões vinculadas (${revisoes.map((x: any) => x.codigo).join(', ')}). Apague as revisões primeiro.`)
+    if (Number(t.qtd_apontamentos) > 0) return avisar('erro', `A TPE ${t.codigo} não pode ser apagada porque tem ${t.qtd_apontamentos} apontamento(s). Use Arquivar.`)
+    const dependentes = (base?.tpes ?? []).filter((x: any) => x.predecessora_id === t.id)
+    if (dependentes.length) return avisar('erro', `A TPE ${t.codigo} não pode ser apagada porque é predecessora de ${dependentes.map((x: any) => x.codigo).join(', ')}.`)
+    if (!(await confirmar('Apagar TPE', <>Apagar definitivamente <strong>{t.codigo}</strong> ({t.descricao})? Use para cadastros feitos por engano ou em duplicidade. O número {String(t.numero).padStart(3, '0')} volta a ficar livre para a próxima TPE. Esta ação não pode ser desfeita.</>, 'Apagar', true))) return
+    const { data, error } = await supabase.rpc('excluir_tpe', { p_tpe: t.id })
+    if (error) return avisar('erro', /excluir_tpe/.test(error.message) && /function|schema cache/i.test(error.message) ? 'Para apagar TPEs, aplique a migração 20261122000007 no Supabase.' : mensagemErro(error))
+    avisar('ok', `${data ?? t.codigo} apagada.`); recarregar()
+  }
 
   if (!base) return <Carregando />
   const principais = [...new Set(catalogo.map((c) => c.principal))]
   return (
     <div className="stack">
       {elemento}
-      <Cabecalho titulo="TPEs e tarefas" texto="Crie tarefas, defina responsável, sequência, prazo e status. Mudar o responsável preserva o histórico de atribuições e de apontamentos."
+      <Cabecalho titulo="TPEs e tarefas" texto="Crie tarefas, defina responsável, predecessora, início e prazo. A ordem de execução de cada projetista é definida em Sequência por projetista."
         acoes={<button className="btn" onClick={novo}><Icone n="mais" /> Nova TPE</button>} />
       {filtro && <Aviso tipo="info">Filtro aplicado pelo painel: <strong>{{ semresp: 'sem responsável', atrasadas: 'prazo vencido', breve: 'vencem em até 3 dias', semprazo: 'sem prazo' }[filtro]}</strong>. <a href="#" onClick={(e) => { e.preventDefault(); qs.delete('f'); setQs(qs) }}>Remover</a></Aviso>}
       <div className="row nao-imprimir">
-        <input type="search" placeholder="Buscar TPE, cliente, descrição, responsável…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 380 }} aria-label="Buscar" />
-        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Status" style={{ maxWidth: 200 }}><option value="abertas">Em aberto</option><option value="">Todos os status</option>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
+        <input type="search" placeholder="Buscar TPE, cliente, descrição, responsável…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 340 }} aria-label="Buscar" />
         <select value={fResp} onChange={(e) => setFResp(e.target.value)} aria-label="Responsável" style={{ maxWidth: 200 }}><option value="">Todos os responsáveis</option><option value="-">Sem responsável</option>{base.recursos.map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select>
-        <span className="muted small">{linhas.length} TPEs</span>
+      </div>
+      <div className="segmentos rolavel nao-imprimir" role="group" aria-label="Filtrar por status">
+        {FILTROS.map(([k, r]) => (
+          <button key={k} type="button" aria-pressed={fStatus === k} className={k === 'atrasadas' && contagem.atrasadas ? 'tem-atraso' : ''} onClick={() => setFStatus(k)}>
+            {r} <span className="contador">{contagem[k]}</span></button>))}
       </div>
       <div className="rolagem">
         {linhas.length === 0 ? <Vazio>Nenhuma TPE com estes filtros.</Vazio> : (
-          <table className="tabela"><thead><tr><th>TPE</th><th>O.S. / cliente</th><th>Principal › grupo</th><th>Descrição</th><th>Responsável</th><th>Status</th><th>Prazo</th><th className="num">Horas</th><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th></th></tr></thead>
-            <tbody>{linhas.map((t: any) => (
-              <tr key={t.id}>
-                <td className="sem-quebra"><strong>{t.codigo}</strong></td>
-                <td>{osBR(t.os)}<div className="small muted">{t.cliente}</div></td>
-                <td className="small">{t.principal} › {t.grupo}{t.grupo_original && t.grupo_original !== t.grupo && <div className="muted" title="Texto da planilha original">orig.: {t.grupo_original}</div>}</td>
-                <td className="small" style={{ maxWidth: 320 }}>{t.descricao}</td>
-                <td>{t.responsavel ?? <span className="badge ambar">sem responsável</span>}{t.sequencia && <div className="small muted">seq. {t.sequencia}</div>}</td>
-                <td><Selo v={t.status} /></td>
-                <td>{dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><SeloPrazo prazo={t.prazo} status={t.status} /></div>}</td>
-                <td className="num">{h1(t.horas_totais)}{Math.abs((t.horas_tarefa ?? t.horas_totais) - t.horas_totais) > 1e-9 && <div className="small muted" title="Horas desta TPE somadas às das revisões (.1, .2…), usadas nas médias">c/ revisões {h1(t.horas_tarefa)}</div>}</td>
-                <td className="num">{t.consumo == null ? '—' : pct(t.consumo)}</td>
-                <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
-                  <button className="btn sec pequeno" onClick={() => editar(t)}>Editar</button>
-                  {t.status !== 'FINALIZADA' && <button className="btn pequeno btn-finalizar" onClick={() => setFin({ t, data: hojeISO() })} title="Marcar como finalizada sem abrir a edição"><Icone n="check" /> Finalizar</button>}
-                  {t.status === 'FINALIZADA' && <button className="btn sec pequeno" onClick={() => reabrir(t)} title="Gera a próxima revisão (.1, .2…)">Reabrir</button>}
-                  <button className="btn fantasma pequeno" onClick={() => arquivar(t)} title="Arquivar (não exclui)"><Icone n="arquivo" /></button>
-                </div></td>
-              </tr>))}</tbody></table>)}
+          <table className="tabela"><thead><tr><th>TPE</th><th>O.S. / cliente</th><th>Principal › grupo</th><th>Descrição</th><th>Responsável</th><th>Status</th><th>Início → prazo</th><th className="num">Horas</th><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th></th></tr></thead>
+            <tbody>{linhas.map((t: any) => {
+              const p: any = t.predecessora_id ? porId.get(t.predecessora_id) : null
+              return (
+                <tr key={t.id} className={t.situacao_prazo === 'ATRASADA' ? 'linha-atraso' : ''}>
+                  <td className="sem-quebra"><strong>{t.codigo}</strong>{p && <div className="small muted" title={`Só pode ser iniciada depois de ${p.codigo}`}>↳ após {p.codigo}</div>}</td>
+                  <td>{osBR(t.os)}<div className="small muted">{t.cliente}</div></td>
+                  <td className="small">{t.principal} › {t.grupo}{t.grupo_original && t.grupo_original !== t.grupo && <div className="muted" title="Texto da planilha original">orig.: {t.grupo_original}</div>}</td>
+                  <td className="small" style={{ maxWidth: 320 }}>{t.descricao}</td>
+                  <td>{t.responsavel ?? <span className="badge ambar">sem responsável</span>}{t.sequencia && t.status !== 'FINALIZADA' && <div className="small muted">na fila</div>}</td>
+                  <td><Selo v={t.status} /></td>
+                  <td className="sem-quebra small">{dataBR(t.data_inicio)} → {dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><SeloPrazo prazo={t.prazo} status={t.status} /></div>}</td>
+                  <td className="num">{h1(t.horas_totais)}{Math.abs((t.horas_tarefa ?? t.horas_totais) - t.horas_totais) > 1e-9 && <div className="small muted" title="Horas desta TPE somadas às das revisões (.1, .2…), usadas nas médias">c/ revisões {h1(t.horas_tarefa)}</div>}</td>
+                  <td className="num">{t.consumo == null ? '—' : pct(t.consumo)}</td>
+                  <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                    <button className="btn sec pequeno" onClick={() => editar(t)}>Editar</button>
+                    {t.status !== 'FINALIZADA' && <button className="btn pequeno btn-finalizar" onClick={() => setFin({ t, data: hojeISO() })} title="Marcar como finalizada sem abrir a edição"><Icone n="check" /> Finalizar</button>}
+                    {t.status === 'FINALIZADA' && <button className="btn sec pequeno" onClick={() => reabrir(t)} title="Gera a próxima revisão (.1, .2…)">Reabrir</button>}
+                    <button className="btn fantasma pequeno" onClick={() => arquivar(t)} title="Arquivar (não exclui)" aria-label={`Arquivar ${t.codigo}`}><Icone n="arquivo" /></button>
+                    <button className="btn fantasma pequeno btn-apagar" onClick={() => apagar(t)} title="Apagar (cadastro errado ou duplicado)" aria-label={`Apagar ${t.codigo}`}><Icone n="lixo" /></button>
+                  </div></td>
+                </tr>)
+            })}</tbody></table>)}
       </div>
       <Dialogo titulo={`Finalizar ${fin?.t.codigo ?? ''}`} aberto={!!fin} aoFechar={() => setFin(null)}>
         {fin && (
@@ -146,12 +212,12 @@ export default function Tpes() {
           </div>
         )}
       </Dialogo>
-      <Dialogo titulo={ed?.novo ?(ed?.reabertura ? `Reabrir ${ed.reabertura} → ${ed.codigo}` : `Nova TPE · ${ed?.codigo}`) : `Editar ${ed?.codigo}`} aberto={!!ed} aoFechar={() => setEd(null)} largo>
+      <Dialogo titulo={ed?.novo ? (ed?.reabertura ? `Reabrir ${ed.reabertura} → ${ed.codigo}` : `Nova TPE · ${ed?.codigo}`) : `Editar ${ed?.codigo}`} aberto={!!ed} aoFechar={() => setEd(null)} largo>
         {ed && (
           <div className="stack">
             {ed.reabertura && <Aviso tipo="info">A revisão herda O.S., principal e grupo de {ed.reabertura}. Descreva o motivo/escopo da revisão.</Aviso>}
             <div className="grid2">
-              <Campo rotulo="Código" ajuda={ed.novo ? 'Gerado automaticamente; pode ser ajustado.' : 'Não editável.'}><input value={ed.codigo} readOnly={!ed.novo} onChange={(e) => setEd({ ...ed, codigo: e.target.value.toUpperCase() })} /></Campo>
+              <Campo rotulo="Código" ajuda={ed.novo ? 'Gerado automaticamente (usa o menor número livre); pode ser ajustado.' : 'Não editável.'}><input value={ed.codigo} readOnly={!ed.novo} onChange={(e) => setEd({ ...ed, codigo: e.target.value.toUpperCase() })} /></Campo>
               <Campo rotulo="O.S." erro={erros.os}><select value={ed.os} onChange={(e) => setEd({ ...ed, os: e.target.value })}><option value="">Escolha…</option>
                 {base.os.filter((o: any) => !o.arquivada || o.os === ed.os).map((o: any) => <option key={o.os} value={o.os}>{osBR(o.os)} · {o.nome}{o.status === 'FINALIZADA' ? ' (finalizada)' : ''}</option>)}</select></Campo>
               <Campo rotulo="Principal"><select value={ed.principal} onChange={(e) => setEd({ ...ed, principal: e.target.value, grupo: '' })}><option value="">Escolha…</option>{principais.map((p) => <option key={p}>{p}</option>)}</select></Campo>
@@ -159,14 +225,36 @@ export default function Tpes() {
                 {catalogo.filter((c) => c.principal === ed.principal && (c.ativo || c.grupo === ed.grupo)).map((c) => <option key={c.id}>{c.grupo}</option>)}</select></Campo>
             </div>
             <Campo rotulo="Descrição" erro={erros.descricao}><textarea rows={2} maxLength={500} value={ed.descricao} onChange={(e) => setEd({ ...ed, descricao: e.target.value })} placeholder="Ex.: Elaboração do desenho do vaso SLCH1930 -35°C" /></Campo>
-            <div className="grid4">
-              <Campo rotulo="Responsável"><select value={ed.responsavel_id} onChange={(e) => setEd({ ...ed, responsavel_id: e.target.value })}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
-              <Campo rotulo="Sequência" ajuda="Vazio = fim da fila"><input type="number" min={1} value={ed.sequencia} onChange={(e) => setEd({ ...ed, sequencia: e.target.value })} /></Campo>
-              <Campo rotulo="Status" ajuda="Só o Supervisor altera"><select value={ed.status} onChange={(e) => setEd({ ...ed, status: e.target.value })}>{STATUS.map((s) => <option key={s}>{s}</option>)}</select></Campo>
-              <Campo rotulo="Prazo" erro={erros.prazo}><input type="date" value={ed.prazo} onChange={(e) => setEd({ ...ed, prazo: e.target.value })} /></Campo>
-              <Campo rotulo="Data de início"><input type="date" value={ed.data_inicio} onChange={(e) => setEd({ ...ed, data_inicio: e.target.value })} /></Campo>
-              <Campo rotulo="Data de finalização" erro={erros.data_fim}><input type="date" value={ed.data_fim} onChange={(e) => setEd({ ...ed, data_fim: e.target.value })} /></Campo>
+            <div className="grid2">
+              <Campo rotulo="Responsável" ajuda="Entra no fim da fila do projetista; a ordem se ajusta em Sequência por projetista.">
+                <select value={ed.responsavel_id} onChange={(e) => setEd({ ...ed, responsavel_id: e.target.value })}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
+              <Campo rotulo="Predecessora" ajuda="Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.">
+                <select value={ed.predecessora_id} onChange={(e) => setEd({ ...ed, predecessora_id: e.target.value })}>
+                  <option value="">Nenhuma</option>
+                  {opcoesPred.map((t: any) => <option key={t.id} value={t.id}>{t.codigo} · {t.grupo}{t.responsavel ? ` · ${t.responsavel}` : ''} · {t.status.toLowerCase()}</option>)}
+                </select></Campo>
             </div>
+            {pred && (
+              <div className={`aviso ${iniciada(pred) ? 'ok' : 'atencao'}`} role="status"><Icone n={iniciada(pred) ? 'check' : 'info'} /><div>
+                {iniciada(pred) ? <><strong>{pred.codigo}</strong> já foi iniciada: esta TPE está liberada.</> : <><strong>{pred.codigo}</strong> ainda não foi iniciada: o projetista verá esta TPE como “aguardando” e não conseguirá apontar até ela começar.</>}
+                {pred.responsavel && String(pred.responsavel_id) !== String(ed.responsavel_id) && ed.responsavel_id && <> A predecessora é de <strong>{pred.responsavel}</strong>; no cronograma aparece a passagem entre os dois.</>}
+                {pred.data_inicio && ed.data_inicio && ed.data_inicio < String(pred.data_inicio).slice(0, 10) && <> O início informado ({dataBR(ed.data_inicio)}) é antes do início da predecessora ({dataBR(pred.data_inicio)}). <button type="button" className="btn sec pequeno" onClick={() => setEd(comInicio(ed, String(pred.data_inicio).slice(0, 10)))}>Começar em {dataBR(pred.data_inicio)}</button></>}
+              </div></div>)}
+            <div className="grid4">
+              <Campo rotulo="Status" ajuda="Só o Supervisor altera" erro={erros.status}><select value={ed.status} onChange={(e) => setEd({ ...ed, status: e.target.value })}>{STATUS.filter((s) => !ed.novo || s !== 'FINALIZADA').map((s) => <option key={s}>{s}</option>)}</select></Campo>
+              <Campo rotulo="Data de início"><input type="date" value={ed.data_inicio} onChange={(e) => setEd(comInicio(ed, e.target.value))} /></Campo>
+              <Campo rotulo="Duração (dias úteis)" erro={erros.dias} ajuda="Sem sábados, domingos e feriados"><input type="number" min={1} inputMode="numeric" value={ed.dias} onChange={(e) => setEd(comDias(ed, e.target.value))} placeholder="ex.: 5" /></Campo>
+              <Campo rotulo="Prazo" erro={erros.prazo}><input type="date" value={ed.prazo} onChange={(e) => setEd(comPrazo(ed, e.target.value))} /></Campo>
+              {!ed.novo && ed.status === 'FINALIZADA' && <Campo rotulo="Data de finalização" erro={erros.data_fim}><input type="date" value={ed.data_fim} onChange={(e) => setEd({ ...ed, data_fim: e.target.value })} /></Campo>}
+            </div>
+            {sugestao && (
+              <div className="sugestao-prazo small">
+                <Icone n="grafico" t={16} />
+                <span>Prazo médio de <strong>{sugestao.n}</strong> TPE(s) finalizada(s) {sugestao.base === 'grupo' ? `de ${ed.principal} › ${ed.grupo}` : `de ${ed.principal} (sem histórico do grupo)`}: <strong>{sugestao.dias} {sugestao.dias === 1 ? 'dia útil' : 'dias úteis'}</strong>
+                  {ed.data_inicio && <> → prazo em <strong>{dataBR(fimPorDiasUteis(ed.data_inicio, sugestao.dias, base.feriados))}</strong></>}.</span>
+                {ed.data_inicio && String(sugestao.dias) !== String(ed.dias) && <button type="button" className="btn sec pequeno" onClick={() => setEd(comDias(ed, String(sugestao.dias)))}>Usar este prazo</button>}
+              </div>)}
+            {ed.principal && ed.grupo && !sugestao && <p className="muted small" style={{ margin: 0 }}>Ainda não há TPEs finalizadas deste grupo para sugerir um prazo médio.</p>}
             <Campo rotulo="Instruções ao projetista" ajuda="Aparecem na tela “Minhas tarefas”."><textarea rows={2} maxLength={1000} value={ed.instrucoes} onChange={(e) => setEd({ ...ed, instrucoes: e.target.value })} /></Campo>
             <div className="row" style={{ justifyContent: 'flex-end' }}>
               <button className="btn sec" onClick={() => setEd(null)}>Cancelar</button>

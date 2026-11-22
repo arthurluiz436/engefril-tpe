@@ -6,11 +6,14 @@ import { paraParametros, situacaoPrazo } from '../../lib/dados'
 import { dataBR, h1, hm, hojeISO, int, pct, reais0, somaDias } from '../../lib/formato'
 import { Aviso, Cabecalho, Carregando, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
 import Gantt from '../../components/Gantt'
+import { filtrarPeriodo, SeletorPeriodo, textoPeriodo, usePeriodo } from '../../components/Periodo'
 
 export default function Painel() {
   const { base, erro, recarregar, carregando, atualizadoEm } = useBase()
   const navegar = useNavigate()
-  const k = useMemo(() => base && indicadores(base.aps, base.tpes, base.os, base.recursos.map((r: any) => r.nome), paraParametros(base.parametros), base.feriados), [base])
+  const [periodo, setPeriodo] = usePeriodo(base)
+  const recorte = useMemo(() => (base ? filtrarPeriodo(base, periodo) : null), [base, periodo])
+  const k = useMemo(() => recorte && indicadores(recorte.aps, recorte.tpes, recorte.os, recorte.recursos.map((r: any) => r.nome), paraParametros(recorte.parametros), recorte.feriados), [recorte])
   const pend = useMemo(() => {
     if (!base) return null
     const abertas = base.tpes.filter((t: any) => t.status !== 'FINALIZADA' && !t.arquivada)
@@ -34,12 +37,13 @@ export default function Painel() {
     }
   }, [base])
 
-  if (!base || !k || !pend) return erro ? <Aviso tipo="erro">{erro}</Aviso> : <Carregando />
+  if (!base || !k || !pend || !periodo) return erro ? <Aviso tipo="erro">{erro}</Aviso> : <Carregando />
   const r = k.resumo
   return (
     <div className="stack">
-      <Cabecalho titulo="Painel do Supervisor" texto={`Período com apontamentos: ${dataBR(r.inicio)} a ${dataBR(r.fim)}.`}
+      <Cabecalho titulo="Painel do Supervisor" texto={`Indicadores do período ${textoPeriodo(periodo)}${r.inicio ? ` (apontamentos de ${dataBR(r.inicio)} a ${dataBR(r.fim)})` : " · sem apontamentos no período"}. Pendências e cronograma mostram a situação atual.`}
         acoes={<><span className="small muted">Atualizado {atualizadoEm?.toLocaleTimeString('pt-BR')}</span><button className="btn sec" onClick={recarregar} disabled={carregando}>Atualizar</button></>} />
+      <SeletorPeriodo periodo={periodo} aoMudar={setPeriodo} base={base} />
       <div className="grid4">
         <Kpi rotulo="TPEs cadastrados" valor={int(r.tpes)} sub={`${int(r.finalizados)} finalizados · ${int(r.abertos)} em aberto`} titulo="KPI!B7–B9 (validado)" />
         <Kpi rotulo="O.S. atendidas" valor={int(r.os_atendidas)} sub={`${r.os_clientes} de clientes · ${r.os_internas} internas`} titulo="KPI!B12 (validado)" />
@@ -79,7 +83,7 @@ export default function Painel() {
         </div>
       </div>
       <div className="card">
-        <h2>Carga da equipe (período total)</h2>
+        <h2>Carga da equipe no período</h2>
         <table className="tabela"><thead><tr><th>Projetista</th><th>Período</th><th className="num">Horas</th><th className="num">Capacidade</th><th>Índice de alocação</th><th className="num">% H.E.</th><th className="num">TPEs</th></tr></thead>
           <tbody>{k.porRecurso.map((x) => (
             <tr key={x.recurso}><td>{x.recurso}</td><td className="small">{dataBR(x.primeiro_dia)} a {dataBR(x.ultimo_dia)}</td><td className="num">{h1(x.horas)}</td><td className="num">{h1(x.capacidade)}</td>
@@ -89,8 +93,8 @@ export default function Painel() {
       </div>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}><h2 style={{ margin: 0 }}>Cronograma da equipe</h2><Link to="/master/sequencias">Ajustar sequência</Link></div>
-        <p className="muted small" style={{ margin: '0 0 12px' }}>Planejado (barra de cima) × realizado (barra de baixo) de cada projetista, dos últimos 30 dias até o último prazo ativo. Clique no nome para abrir a sequência.</p>
-        <Gantt tpes={base.tpes} recursos={base.recursos} aoEscolher={(id) => navegar(`/master/sequencias?r=${id}`)} />
+        <p className="muted small" style={{ margin: '0 0 12px' }}>Planejado (barra de cima) × realizado (barra de baixo) de cada projetista, dos últimos 15 dias até o último prazo ativo. Clique no nome para abrir a sequência.</p>
+        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} aoEscolher={(id) => navegar(`/master/sequencias?r=${id}`)} />
       </div>
       {pend.atrasadas.length > 0 && (
         <div className="card"><h2>TPEs com prazo vencido</h2>

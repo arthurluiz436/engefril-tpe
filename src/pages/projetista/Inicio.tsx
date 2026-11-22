@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
-import { minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
+import { aguardandoPredecessora, minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, hm, hojeISO, osBR, somaDias } from '../../lib/formato'
 import { Aviso, Carregando, Dialogo, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
@@ -163,6 +163,7 @@ export default function Inicio() {
                         <div className="row" style={{ gap: 8 }}>
                           <span className="ordem" title="Ordem de execução">{t.sequencia ?? i + 1}º</span>
                           <SeloPrazo prazo={t.prazo} status={t.status} />
+                          {aguardandoPredecessora(t) && <span className="badge aguardando">⏳ aguardando {t.predecessora_codigo}</span>}
                           <Selo v={t.status} />
                         </div>
                         <h2 style={{ marginTop: 8 }}>{t.codigo} · {t.principal} › {t.grupo}</h2>
@@ -172,7 +173,7 @@ export default function Inicio() {
                           </div>
                         {t.instrucoes && <Aviso tipo="info"><strong>Instruções:</strong> {t.instrucoes}</Aviso>}
                       </div>
-                      <Link className="btn" to={`/registrar?tpe=${t.tpe_id}`}>Registrar nesta TPE</Link>
+                      {aguardandoPredecessora(t) ? <span className="small muted" style={{ maxWidth: 220 }}>Liberada quando {t.predecessora_codigo} for iniciada</span> : <Link className="btn" to={`/registrar?tpe=${t.tpe_id}`}>Registrar nesta TPE</Link>}
                     </div>
                   </div>
                 )

@@ -250,3 +250,67 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 @media (max-width: 600px) { .aps-hoje .ap { grid-template-columns: 1fr auto; } .aps-hoje .faixa { grid-column: 1 / -1; } }
 .jornada-flex { border: 1px solid var(--azul-100); background: var(--azul-50); border-radius: var(--raio-sm); padding: 12px 14px; margin: 0; display: grid; gap: 6px; }
 .jornada-flex legend { font-weight: 700; font-size: .9rem; color: var(--grafite-900); padding: 0 4px; }
+
+/* ---- Gantt v2 (faixas por projetista, zebra, setas) */
+.gantt2 { display: grid; gap: 10px; min-width: 0; }
+.lg.sobrecarga { background: var(--vermelho); opacity: .75; height: 5px !important; }
+.lg.seta { width: 22px !important; height: 0 !important; border-top: 2px solid #6b7079; border-radius: 0 !important; }
+.lg.seta-outro { width: 22px !important; height: 0 !important; border-top: 2px dashed var(--azul); border-radius: 0 !important; }
+.g2-rolagem { min-width: 0; }
+.g2-rolagem.rola { overflow-x: auto; }
+.g2-grade { display: grid; position: relative; }
+.g2-cab-rot { position: sticky; left: 0; z-index: 3; background: #fff; display: flex; align-items: flex-end; padding: 0 10px 6px; color: var(--cinza-600); font-weight: 600; border-bottom: 1px solid var(--cinza-200); }
+.g2-eixo { position: relative; border-bottom: 1px solid var(--cinza-200); overflow: hidden; }
+.g2-mes { position: absolute; top: 1px; font-size: .7rem; font-weight: 700; color: var(--grafite-900); text-transform: capitalize; white-space: nowrap; }
+.g2-dia { position: absolute; top: 17px; transform: translateX(-50%); font-size: .66rem; color: var(--cinza-600); white-space: nowrap; }
+.g2-dia.fds { color: var(--cinza-500); }
+.g2-sem { display: none; }
+.g2-hoje-rot { position: absolute; top: 0; transform: translateX(-50%); background: var(--dourado); color: #fff; font-size: .62rem; font-weight: 700; padding: 1px 6px; border-radius: 99px; z-index: 2; }
+.g2-rotulos { position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 1px 0 0 var(--cinza-200); }
+.g2-rot-pista, .g2-rot-tarefa, .g2-rot-carga { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 6px; border-left: 4px solid; padding: 0 8px 0 8px; min-width: 0; }
+.g2-rot-pista > button, .g2-rot-pista > div { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; border: 0; background: none; font: inherit; color: inherit; padding: 0; text-align: left; width: 100%; overflow: hidden; }
+.g2-rot-pista > button { cursor: pointer; }
+.g2-rot-pista > button:hover strong { text-decoration: underline; }
+.g2-rot-pista strong { font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g2-rot-pista .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .7rem; }
+.g2-rot-pista.destaque { box-shadow: inset 0 0 0 2px var(--azul); }
+.g2-ponto { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.g2-rot-tarefa { font-size: .78rem; background: #fff; border-bottom: 1px solid #eef0f3; }
+.g2-rot-tarefa.zebra { background: #f6f7f9; }
+.g2-rot-tarefa.sel { background: rgba(4, 74, 179, .10); }
+.g2-rot-tarefa.feita { opacity: .65; }
+.g2-rot-carga { font-size: .66rem; background: #fafbfc; }
+.gantt-n.atrasada { background: var(--vermelho); color: #fff; }
+.gantt-n.ok { background: var(--verde-50); color: var(--verde); }
+.g2-passa { flex: none; font-size: .64rem; font-weight: 700; border: 1.5px dashed; border-radius: 99px; padding: 0 5px; line-height: 1.4; background: #fff; }
+.g2-trilha { position: relative; }
+.g2-trilha svg { display: block; }
+.g2-semprazo { font-size: 10px; fill: var(--cinza-500); font-style: italic; }
+.g2-carga-n { font-size: 10px; font-weight: 700; }
+.reprog { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 2px 8px; border-radius: 6px; background: var(--azul-50); color: var(--azul-800); }
+
+/* ---- Cronograma em tela cheia */
+.cronograma:fullscreen { background: var(--cinza-50); padding: 20px; overflow: auto; }
+.chip-proj { display: inline-flex; align-items: center; gap: 6px; border: 2px solid; border-radius: 99px; background: #fff; padding: 3px 10px; font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; color: var(--grafite-900); }
+.chip-proj.off { opacity: .45; border-style: dashed; }
+.lista-atencao { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: .86rem; }
+.lista-atencao li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--cinza-100); }
+.detalhe-tpe { border-top: 3px solid var(--azul); }
+.segmentos.rolavel { max-width: 100%; overflow-x: auto; }
+.segmentos.rolavel button { white-space: nowrap; }
+.btn-apagar { color: var(--vermelho); }
+.btn-apagar:hover { background: var(--vermelho-50); }
+.sugestao-prazo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: var(--raio-sm); background: var(--dourado-50); border: 1px solid #f0d89a; color: #5c4300; }
+.cores-proj { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.cor-proj { display: flex; align-items: center; gap: 10px; border: 1px solid var(--cinza-200); border-left: 6px solid; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.cor-proj input[type='color'] { width: 40px; height: 32px; min-height: 0; padding: 2px; border-radius: 6px; cursor: pointer; flex: none; }
+.cor-proj > span { display: grid; min-width: 0; }
+.cor-proj .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge.aguardando { background: #eef0f3; color: var(--grafite-700); box-shadow: inset 0 0 0 1px var(--cinza-300); }
+.opcao-tpe:disabled { opacity: .6; cursor: not-allowed; background: var(--cinza-50); }
+.periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; background: #fff; border: 1px solid var(--cinza-200); border-radius: var(--raio); box-shadow: var(--sombra); }
+@media print { .periodo { display: none; } }
+.g2-rot-pista strong { flex: 0 1 auto; min-width: 48px; }
+.g2-rot-pista .small { flex: 1 1 0; min-width: 0; }
+.g2-rot-tarefa .gantt-cod { flex: 0 1 auto; min-width: 0; }
+.g2-passa { padding: 0 4px; }

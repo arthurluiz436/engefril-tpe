@@ -3,6 +3,7 @@ import { supabase, mensagemErro } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { useBase } from '../../lib/base'
 import { dataHoraBR } from '../../lib/formato'
+import { corRecurso } from '../../lib/agenda'
 import { Aviso, Cabecalho, Campo, Dialogo, Icone, useAvisar, useConfirmar } from '../../components/ui'
 
 export default function Usuarios() {
@@ -42,6 +43,7 @@ export default function Usuarios() {
     avisar(error ? 'erro' : 'ok', error ? mensagemErro(error) : 'Projetista cadastrado. Defina o custo H/H em Parâmetros.'); recarregar()
   }
   const vinculados = new Set(perfis.map((p) => p.recurso_id).filter(Boolean))
+  const semCor = !!base?.recursos.length && !('cor' in base.recursos[0])
   return (
     <div className="stack">
       {elemento}
@@ -56,6 +58,27 @@ export default function Usuarios() {
               <option value="">— nenhum —</option>{(base?.recursos ?? []).map((r: any) => <option key={r.id} value={r.id} disabled={vinculados.has(r.id) && p.recurso_id !== r.id}>{r.nome}</option>)}</select></td>
             <td>{p.ativo ? <span className="badge verde">ativo</span> : <span className="badge vermelho">desativado</span>}</td><td className="small">{dataHoraBR(p.criado_em)}</td>
             <td>{p.user_id !== perfil?.user_id && <button className="btn sec pequeno" onClick={() => alterar(p, { ativo: !p.ativo }, p.ativo ? 'Desativar o acesso' : 'Reativar o acesso')}>{p.ativo ? 'Desativar' : 'Reativar'}</button>}</td></tr>))}</tbody></table></div>
+      <div className="card">
+        <h2>Cor de cada projetista</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>Usada nas faixas e barras dos cronogramas. Escolha cores bem diferentes entre si para cada pessoa ser reconhecida de longe.</p>
+        {semCor && <Aviso tipo="atencao">Para gravar as cores, aplique a migração <code>20261122000007_predecessora_cor_exclusao.sql</code> no Supabase. Até lá o sistema usa cores automáticas.</Aviso>}
+        <div className="cores-proj">
+          {(base?.recursos ?? []).map((r: any, i: number) => {
+            const login = perfis.find((p) => p.recurso_id === r.id)
+            return (
+              <label key={r.id} className="cor-proj" style={{ borderLeftColor: corRecurso(r, i) }}>
+                <input type="color" defaultValue={corRecurso(r, i)} disabled={semCor} aria-label={`Cor de ${r.nome}`}
+                  onBlur={async (e) => {
+                    const cor = e.target.value
+                    if (cor.toLowerCase() === corRecurso(r, i).toLowerCase()) return
+                    const { error } = await supabase.from('recursos').update({ cor }).eq('id', r.id)
+                    avisar(error ? 'erro' : 'ok', error ? mensagemErro(error) : `Cor de ${r.nome} atualizada.`); if (!error) recarregar()
+                  }} />
+                <span><strong>{r.nome}</strong><span className="small muted">{login ? login.email : 'sem login'}{!r.ativo ? ' · inativo' : ''}</span></span>
+              </label>)
+          })}
+        </div>
+      </div>
       <Aviso tipo="info">O primeiro Supervisor é criado por procedimento no banco (docs/PUBLICACAO.md). Não há cadastro público: desative “Allow new users to sign up” no Supabase.</Aviso>
       <Dialogo titulo="Convidar usuário" aberto={!!convite} aoFechar={() => setConvite(null)}>
         {convite && (<div className="stack">

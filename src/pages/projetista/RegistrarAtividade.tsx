@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { minhasTarefas, paraParametros, type Tarefa } from '../../lib/dados'
+import { aguardandoPredecessora, minhasTarefas, paraParametros, type Tarefa } from '../../lib/dados'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { dataBR, hm, hojeISO, osBR, somaDias } from '../../lib/formato'
@@ -85,6 +85,7 @@ export default function RegistrarAtividade() {
     const e: Record<string, string> = {}
     if (pedirJornada && !inicioDeclarado) e.jornada = 'Marque em que horário você começou a jornada neste dia.'
     if (!f.tpe_id) e.tpe = 'Escolha a TPE.'
+    else if (tarefa && aguardandoPredecessora(tarefa)) e.tpe = `Esta TPE só pode ser apontada depois que ${tarefa.predecessora_codigo} for iniciada.`
     if (!f.dia) e.dia = 'Informe a data.'
     else if (f.dia > somaDias(hoje, 1)) e.dia = 'A data não pode ser futura.'
     else if (f.dia < somaDias(hoje, -JANELA)) e.dia = `Lançamentos com mais de ${JANELA} dias devem ser feitos pelo Supervisor.`
@@ -94,7 +95,7 @@ export default function RegistrarAtividade() {
     if (f.descricao.trim().length < 3) e.descricao = 'Descreva brevemente o que foi feito.'
     if (f.descricao.length > 500) e.descricao = 'Use no máximo 500 caracteres.'
     return e
-  }, [f, hoje, pedirJornada, inicioDeclarado])
+  }, [f, hoje, pedirJornada, inicioDeclarado, tarefa])
   const sobrepostos = doDia.filter((d) => f.hora_inicio && f.hora_fim && min(d.hora_inicio.slice(0, 5)) < min(f.hora_fim) && min(d.hora_fim.slice(0, 5)) > min(f.hora_inicio))
   const duracao = f.hora_inicio && f.hora_fim && !erros.fim ? (min(f.hora_fim) - min(f.hora_inicio) - Math.max(0, Math.min(min(f.hora_fim), 780) - Math.max(min(f.hora_inicio), 720))) / 60 : null
   // hora extra prevista para este lançamento (mesma regra do cálculo oficial)
@@ -169,7 +170,8 @@ export default function RegistrarAtividade() {
             {!tarefas ? <Carregando /> : tarefas.length === 0 ? <Aviso tipo="info">Você não tem tarefas em aberto atribuídas. Fale com o Supervisor.</Aviso> : (
               <div className="stack" style={{ gap: 8, maxHeight: 420, overflow: 'auto' }} role="listbox" aria-label="TPEs">
                 {tarefas.filter((t) => !busca || `${t.codigo} ${t.cliente} ${t.descricao} ${t.os} ${osBR(t.os)}`.toLowerCase().includes(busca.toLowerCase())).map((t) => (
-                  <button key={t.tpe_id} type="button" className="opcao-tpe" aria-pressed={f.tpe_id === t.tpe_id} onClick={() => setF({ ...f, tpe_id: t.tpe_id })}>
+                  <button key={t.tpe_id} type="button" className="opcao-tpe" aria-pressed={f.tpe_id === t.tpe_id} disabled={aguardandoPredecessora(t)} title={aguardandoPredecessora(t) ? `Liberada quando ${t.predecessora_codigo} for iniciada` : undefined} onClick={() => setF({ ...f, tpe_id: t.tpe_id })}>
+                    {aguardandoPredecessora(t) && <span className="badge aguardando" style={{ float: "right" }}>⏳ aguardando {t.predecessora_codigo}</span>}
                     <strong>{t.codigo}</strong> · {t.principal} › {t.grupo}
                     <div className="small">{t.descricao}</div>
                     <div className="small muted">O.S. {osBR(t.os)} · {t.cliente} · prazo {dataBR(t.prazo)}</div>
