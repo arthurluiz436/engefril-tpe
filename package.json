@@ -1,0 +1,35 @@
+{
+  "name": "engefril-tpe-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Engefril · Sistema web de gestão de TPEs, tarefas e apontamentos",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:db": "vitest run tests/db",
+    "test:calc": "vitest run tests/calc"
+  },
+  "dependencies": {
+    "@fontsource/montserrat": "^5.2.5",
+    "@supabase/supabase-js": "^2.49.0",
+    "exceljs": "^4.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
+    "@electric-sql/pglite-tools": "^0.2.21",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.8"
+  }
+}

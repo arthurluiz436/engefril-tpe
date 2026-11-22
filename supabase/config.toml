@@ -1,0 +1,18 @@
+# Configuração do Supabase CLI (desenvolvimento local / deploy de funções)
+project_id = "engefril-tpe"
+
+[auth]
+# cadastro público DESLIGADO: acesso somente por convite do Master
+enable_signup = false
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173", "https://USUARIO.github.io/REPOSITORIO/"]
+jwt_expiry = 3600
+minimum_password_length = 10
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+secure_password_change = true
+
+[functions.admin-usuarios]
+verify_jwt = true
