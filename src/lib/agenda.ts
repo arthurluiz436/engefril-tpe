@@ -31,24 +31,60 @@ export function diasUteisEntre(a: string, b: string, feriados?: Set<string>): nu
   return n
 }
 
-export interface TarefaAgenda { id: number; codigo: string; data_inicio: string | null; prazo: string | null; predecessora_id?: number | null }
-export interface Reprogramada { id: number; codigo: string; de: [string | null, string | null]; para: [string | null, string | null]; dias: number | null; mudou: boolean }
+export interface TarefaAgenda {
+  id: number; codigo: string; data_inicio: string | null; prazo: string | null; predecessora_id?: number | null
+  status?: string | null; primeiro_apontamento?: string | null
+}
+export interface Reprogramada {
+  id: number; codigo: string; de: [string | null, string | null]; para: [string | null, string | null]; dias: number | null; mudou: boolean
+  /** em andamento: as datas planejadas não mudam (são a linha de base); só o fim efetivo empurra a fila */
+  iniciada?: boolean
+  /** fim previsto de fato (iniciada: início real + duração, ou hoje se já passou do prazo) */
+  fimEfetivo?: string | null
+  /** desvio do fim em dias úteis em relação ao prazo salvo: + atraso/postergação, − antecipação */
+  desvio?: number
+}
+
+/** Diferença com sinal, em dias úteis, entre o prazo salvo e o novo fim (+ depois, − antes). */
+export function desvioDiasUteis(prazo: string, novoFim: string, feriados?: Set<string>): number {
+  if (novoFim === prazo) return 0
+  return novoFim > prazo ? diasUteisEntre(somaDiasCorridos(prazo, 1), novoFim, feriados) : -diasUteisEntre(somaDiasCorridos(novoFim, 1), prazo, feriados)
+}
+const comecou = (t: TarefaAgenda) => !!t.primeiro_apontamento || t.status === 'EM ANDAMENTO' || t.status === 'PAUSADA'
 
 /**
- * Reprograma uma fila de tarefas na ordem dada, mantendo a duração (dias úteis entre início e prazo) de cada uma.
- * A fila começa no início mais cedo entre as tarefas (o "lugar" da fila no calendário não muda).
- * Cada tarefa começa no dia útil seguinte ao fim da anterior e nunca antes do início da predecessora.
- * Tarefas sem início ou sem prazo não têm duração conhecida: ficam como estão e não empurram a fila.
+ * Reprograma a fila de um projetista na ordem dada, como num cronograma com vínculos término→início:
+ * - cada tarefa mantém a sua duração (dias úteis entre início e prazo salvos);
+ * - cada tarefa começa no dia útil seguinte ao fim da anterior e nunca antes do início da predecessora;
+ * - tarefas sem início ou sem prazo não têm duração conhecida: ficam como estão e não empurram a fila.
+ *
+ * Com `hoje` (atualização pelo andamento real, como a "data de status" do MS Project):
+ * - tarefa JÁ INICIADA não tem as datas alteradas (o prazo é a linha de base e o atraso continua visível),
+ *   mas o fim efetivo dela é o início real + duração; se isso já passou e ela não terminou, o fim efetivo é hoje.
+ *   É esse fim que empurra (atraso) ou puxa (antecipação) as tarefas seguintes;
+ * - tarefa NÃO INICIADA nunca é programada para antes de hoje.
  */
-export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, outras: Map<number, TarefaAgenda> = new Map()): Reprogramada[] {
+export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, outras: Map<number, TarefaAgenda> = new Map(), hoje?: string): Reprogramada[] {
+  const fixa = (t: TarefaAgenda): Reprogramada => ({ id: t.id, codigo: t.codigo, de: [t.data_inicio, t.prazo], para: [t.data_inicio, t.prazo], dias: null, mudou: false })
   const comDatas = fila.filter((t) => t.data_inicio && t.prazo)
-  if (!comDatas.length) return fila.map((t) => ({ id: t.id, codigo: t.codigo, de: [t.data_inicio, t.prazo], para: [t.data_inicio, t.prazo], dias: null, mudou: false }))
+  if (!comDatas.length) return fila.map(fixa)
+  const hojeUtil = hoje ? proximoDiaUtil(hoje, feriados) : null
   let cursor = proximoDiaUtil(comDatas.map((t) => t.data_inicio!.slice(0, 10)).sort()[0], feriados)
   const novoInicio = new Map<number, string>()
   return fila.map((t) => {
-    if (!t.data_inicio || !t.prazo) return { id: t.id, codigo: t.codigo, de: [t.data_inicio, t.prazo], para: [t.data_inicio, t.prazo], dias: null, mudou: false }
-    const dias = Math.max(1, diasUteisEntre(t.data_inicio.slice(0, 10), t.prazo.slice(0, 10), feriados))
+    if (!t.data_inicio || !t.prazo) return fixa(t)
+    const di = t.data_inicio.slice(0, 10), pz = t.prazo.slice(0, 10)
+    const dias = Math.max(1, diasUteisEntre(di, pz, feriados))
+    if (hoje && comecou(t)) {
+      const real = (t.primeiro_apontamento ? String(t.primeiro_apontamento).slice(0, 10) : di)
+      let fimEf = fimPorDiasUteis(real, dias, feriados)
+      if (fimEf < hoje) fimEf = hojeUtil!
+      novoInicio.set(t.id, real)
+      cursor = proximoDiaUtil(somaDiasCorridos(fimEf, 1), feriados)
+      return { id: t.id, codigo: t.codigo, de: [di, pz], para: [di, pz], dias, mudou: false, iniciada: true, fimEfetivo: fimEf, desvio: desvioDiasUteis(pz, fimEf, feriados) }
+    }
     let ini = cursor
+    if (hojeUtil && ini < hojeUtil) ini = hojeUtil
     if (t.predecessora_id) {
       const p = novoInicio.get(t.predecessora_id) ?? outras.get(t.predecessora_id)?.data_inicio?.slice(0, 10)
       if (p && p > ini) ini = proximoDiaUtil(p, feriados)
@@ -56,8 +92,8 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
     const fim = fimPorDiasUteis(ini, dias, feriados)
     novoInicio.set(t.id, ini)
     cursor = proximoDiaUtil(somaDiasCorridos(fim, 1), feriados)
-    const mudou = ini !== t.data_inicio.slice(0, 10) || fim !== t.prazo.slice(0, 10)
-    return { id: t.id, codigo: t.codigo, de: [t.data_inicio.slice(0, 10), t.prazo.slice(0, 10)], para: [ini, fim], dias, mudou }
+    const mudou = ini !== di || fim !== pz
+    return { id: t.id, codigo: t.codigo, de: [di, pz], para: [ini, fim], dias, mudou, fimEfetivo: fim, desvio: desvioDiasUteis(pz, fim, feriados) }
   })
 }
 

@@ -380,3 +380,12 @@ th.num .th-ordem { justify-content: flex-end; }
 /* Cronograma: O.S. ao lado do código da TPE */
 .g2-os { flex: none; font-size: .68rem; font-weight: 600; color: var(--grafite-700, #484a4e); background: var(--cinza-100); border-radius: 4px; padding: 0 5px; line-height: 1.5; white-space: nowrap; }
 .g2-rot-tarefa .g2-passa { flex: none; }
+
+/* Clientes e O.S.: O.S. pronta para finalizar (sem TPE em aberto) */
+.segmentos button.tem-apta:not([aria-pressed='true']) .contador { background: var(--verde); color: #fff; }
+.faixa-apta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px; border-radius: var(--raio-sm);
+  background: linear-gradient(90deg, var(--verde-50), #fff 70%); box-shadow: inset 4px 0 0 var(--verde); border: 1px solid #b9e2cb; }
+.faixa-apta .badge { display: inline-flex; align-items: center; gap: 4px; }
+.selo-apta { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: .72rem; font-weight: 700; color: var(--verde);
+  background: var(--verde-50); border: 1px solid #b9e2cb; border-radius: 99px; padding: 2px 8px; margin-left: 2px; }
+.btn-finalizar.pronta { box-shadow: 0 0 0 3px rgba(30, 125, 74, .25); }

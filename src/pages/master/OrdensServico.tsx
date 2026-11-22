@@ -16,7 +16,7 @@ export function parecerOS(o: any): { rot: string; cor: string; dias: number } | 
   return { rot: `Finalizada atrasada · ${d} ${d === 1 ? 'dia' : 'dias'}`, cor: 'vermelho', dias: d }
 }
 
-type Filtro = 'abertas' | 'atrasadas' | 'finalizadas' | 'todas'
+type Filtro = 'abertas' | 'atrasadas' | 'aptas' | 'finalizadas' | 'todas'
 
 export default function OrdensServico() {
   const { base, recarregar } = useBase()
@@ -37,17 +37,25 @@ export default function OrdensServico() {
   const temFin = !!base?.os.length && 'data_finalizacao' in base.os[0]
   const hoje = hojeISO()
   const atrasada = (o: any) => o.status !== 'FINALIZADA' && !!o.prazo_final && String(o.prazo_final).slice(0, 10) < hoje
+  /** O.S. em aberto com TPEs e nenhuma pendente ou em andamento: pode ser finalizada */
+  const apta = (o: any) => o.status !== 'FINALIZADA' && Number(o.qtd_tpes) > 0 && Number(o.tpes_abertas) === 0
+  // data do apontamento mais recente de cada O.S.
+  const ultimoAp = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const a of base?.aps ?? []) { const d = String(a.dia).slice(0, 10); const o = Number(a.os); if (!m.has(o) || d > m.get(o)!) m.set(o, d) }
+    return m
+  }, [base])
   const { linhas, contagem, resumoFin } = useMemo(() => {
-    const vazio = { linhas: [], contagem: { abertas: 0, atrasadas: 0, finalizadas: 0, todas: 0 }, resumoFin: { prazo: 0, antes: 0, atrasada: 0 } }
+    const vazio = { linhas: [], contagem: { abertas: 0, atrasadas: 0, aptas: 0, finalizadas: 0, todas: 0 }, resumoFin: { prazo: 0, antes: 0, atrasada: 0 } }
     if (!base) return vazio
     const b = busca.toLowerCase()
     const todas = linhasDe('os', base).filter((o: any) => o.arquivada !== 'SIM' && (!b || `${o.os} ${osBR(o.os)} ${o.nome} ${o.cidade} ${o.vendedor}`.toLowerCase().includes(b)))
-    const contagem = { abertas: todas.filter((o: any) => o.status !== 'FINALIZADA').length, atrasadas: todas.filter(atrasada).length,
+    const contagem = { abertas: todas.filter((o: any) => o.status !== 'FINALIZADA').length, atrasadas: todas.filter(atrasada).length, aptas: todas.filter(apta).length,
       finalizadas: todas.filter((o: any) => o.status === 'FINALIZADA').length, todas: todas.length }
     const resumoFin = { prazo: 0, antes: 0, atrasada: 0 }
     for (const o of todas) { const p = parecerOS(o); if (p?.cor === 'verde') resumoFin.prazo++; else if (p?.cor === 'azul') resumoFin.antes++; else if (p?.cor === 'vermelho') resumoFin.atrasada++ }
     const linhas = todas
-      .filter((o: any) => filtro === 'todas' || (filtro === 'finalizadas' ? o.status === 'FINALIZADA' : filtro === 'atrasadas' ? atrasada(o) : o.status !== 'FINALIZADA'))
+      .filter((o: any) => filtro === 'todas' || (filtro === 'finalizadas' ? o.status === 'FINALIZADA' : filtro === 'atrasadas' ? atrasada(o) : filtro === 'aptas' ? apta(o) : o.status !== 'FINALIZADA'))
       // atrasadas primeiro (a mais vencida no topo), depois pela O.S. mais recente
       .sort((a: any, z: any) => Number(atrasada(z)) - Number(atrasada(a)) || (atrasada(a) ? String(a.prazo_final).localeCompare(String(z.prazo_final)) : 0) || z.os - a.os)
     return { linhas, contagem, resumoFin }
@@ -107,8 +115,8 @@ export default function OrdensServico() {
       <div className="row nao-imprimir">
         <input type="search" placeholder="Buscar O.S., cliente, cidade, vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 380 }} aria-label="Buscar" />
         <div className="segmentos" role="group" aria-label="Filtrar O.S.">
-          {([['abertas', 'Em aberto'], ['atrasadas', 'Atrasadas'], ['finalizadas', 'Finalizadas'], ['todas', 'Todas']] as const).map(([k, r]) => (
-            <button key={k} type="button" aria-pressed={filtro === k} className={k === 'atrasadas' && contagem.atrasadas ? 'tem-atraso' : ''} onClick={() => setFiltro(k)}>
+          {([['abertas', 'Em aberto'], ['atrasadas', 'Atrasadas'], ['aptas', 'Prontas p/ finalizar'], ['finalizadas', 'Finalizadas'], ['todas', 'Todas']] as const).map(([k, r]) => (
+            <button key={k} type="button" aria-pressed={filtro === k} className={k === 'atrasadas' && contagem.atrasadas ? 'tem-atraso' : k === 'aptas' && contagem.aptas ? 'tem-apta' : ''} onClick={() => setFiltro(k)}>
               {r} <span className="contador">{contagem[k]}</span></button>))}
         </div>
       </div>
@@ -118,13 +126,19 @@ export default function OrdensServico() {
           <span className="small muted">Elas aparecem primeiro na lista, com a faixa vermelha à esquerda.</span>
           <button type="button" className="btn sec pequeno" onClick={() => setFiltro('atrasadas')}>Ver só as atrasadas</button>
         </div>)}
+      {contagem.aptas > 0 && filtro !== 'aptas' && filtro !== 'finalizadas' && (
+        <div className="faixa-apta" role="status">
+          <span className="badge verde"><Icone n="check" t={14} /> {contagem.aptas} O.S. sem TPE em aberto</span>
+          <span className="small muted">Todas as TPEs delas já foram finalizadas: estão prontas para finalizar (marcadas em verde ao lado do botão).</span>
+          <button type="button" className="btn sec pequeno" onClick={() => setFiltro('aptas')}>Ver só as prontas</button>
+        </div>)}
       {filtro === 'finalizadas' && contagem.finalizadas > 0 && (
         <div className="row small" role="status" style={{ gap: 8 }}>
           <span className="muted">Entregas:</span>
           <span className="badge verde">{resumoFin.prazo} no prazo</span><span className="badge azul">{resumoFin.antes} antes do prazo</span><span className="badge vermelho">{resumoFin.atrasada} atrasadas</span>
         </div>)}
-      <div className="rolagem"><table className="tabela"><thead><tr><th>O.S.</th><th>Cliente · local</th><th>Nível · classificação</th><th>Vendedor</th><th>Prazo final</th><th>Status</th><th>Finalização</th><th className="num">TPEs (abertas)</th><th className="num">Horas</th><th className="num">Custo</th><th></th></tr></thead>
-        <tbody>{linhas.length === 0 && <tr><td colSpan={11} className="vazio">Nenhuma O.S. {({ abertas: 'em aberto', atrasadas: 'atrasada', finalizadas: 'finalizada', todas: '' } as Record<string, string>)[filtro]} {busca ? 'para esta busca' : ''}.</td></tr>}
+      <div className="rolagem"><table className="tabela"><thead><tr><th>O.S.</th><th>Cliente · local</th><th>Nível · classificação</th><th>Vendedor</th><th>Prazo final</th><th>Status</th><th>Finalização</th><th className="num">TPEs (abertas)</th><th title="Data do registro de trabalho mais recente em alguma TPE da O.S.">Último apont.</th><th className="num">Horas</th><th className="num">Custo</th><th></th></tr></thead>
+        <tbody>{linhas.length === 0 && <tr><td colSpan={12} className="vazio">Nenhuma O.S. {({ abertas: 'em aberto', atrasadas: 'atrasada', aptas: 'pronta para finalizar', finalizadas: 'finalizada', todas: '' } as Record<string, string>)[filtro]} {busca ? 'para esta busca' : ''}.</td></tr>}
           {linhas.map((o: any) => {
             const p = parecerOS(o)
             return (
@@ -136,14 +150,17 @@ export default function OrdensServico() {
                 <td className="sem-quebra">{dataBR(o.prazo_final)}{o.status !== 'FINALIZADA' && o.prazo_final && <div><SeloPrazo prazo={o.prazo_final} status={o.status} /></div>}</td>
                 <td><Selo v={o.status} /></td>
                 <td className="sem-quebra">{p ? <>{o.data_finalizacao ? dataBR(o.data_finalizacao) : '—'}<div><span className={`badge ${p.cor}`}>{p.rot}</span></div></> : <span className="muted">—</span>}</td>
-                <td className="num">{o.qtd_tpes} ({o.tpes_abertas})</td><td className="num">{h1(o.horas)}</td><td className="num">{reais0(o.custo)}</td>
+                <td className="num">{o.qtd_tpes} ({o.tpes_abertas})</td>
+                <td className="sem-quebra small">{ultimoAp.get(o.os) ? <>{dataBR(ultimoAp.get(o.os))}<div className="muted">{diasEntre(ultimoAp.get(o.os)!, hoje) === 0 ? 'hoje' : `há ${diasEntre(ultimoAp.get(o.os)!, hoje)} dia(s)`}</div></> : <span className="muted">—</span>}</td>
+                <td className="num">{h1(o.horas)}</td><td className="num">{reais0(o.custo)}</td>
                 <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
                   <button className="btn sec pequeno" onClick={() => setEd({ ...o, data_inicio: o.data_inicio ?? '', prazo_final: o.prazo_final ?? '', data_finalizacao: o.data_finalizacao ?? '' })}>Editar</button>
                   {o.status !== 'FINALIZADA'
-                    ? <button className="btn pequeno btn-finalizar" onClick={() => setFin({ o, data: hoje })}><Icone n="check" /> Finalizar</button>
+                    ? <button className={`btn pequeno btn-finalizar ${apta(o) ? 'pronta' : ''}`} onClick={() => setFin({ o, data: hoje })} title={apta(o) ? 'Todas as TPEs desta O.S. estão finalizadas' : undefined}><Icone n="check" /> Finalizar</button>
                     : <button className="btn sec pequeno" onClick={() => reabrir(o)} title="Volta para em andamento">Reabrir</button>}
                   <button className="btn fantasma pequeno" onClick={() => arquivar(o)} title="Arquivar (não exclui)" aria-label={`Arquivar ${osBR(o.os)}`}><Icone n="arquivo" /></button>
                   <button className="btn fantasma pequeno btn-apagar" onClick={() => apagar(o)} title="Apagar (cadastro errado)" aria-label={`Apagar ${osBR(o.os)}`}><Icone n="lixo" /></button>
+                  {apta(o) && <span className="selo-apta" title="Nenhuma TPE pendente ou em andamento: a O.S. pode ser finalizada"><Icone n="check" t={13} /> Pronta para finalizar</span>}
                 </div></td>
               </tr>)
           })}</tbody></table></div>

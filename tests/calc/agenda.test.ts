@@ -89,3 +89,39 @@ describe('Carga diária e sobrecarga', () => {
     expect(carga.has('2026-11-20')).toBe(true)
   })
 })
+
+describe('Atualização do cronograma pelo andamento (atraso e antecipação)', () => {
+  const S = new Set<string>()
+  it('atraso da TPE em andamento empurra as seguintes; a atrasada mantém as datas', () => {
+    // hoje = qua 25/11; TPE-001 em andamento, prazo seg 23/11 (atrasada); TPE-002 (2 d.u.) e TPE-003 (3 d.u.)
+    const r = reprogramarFila([
+      { id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-18', prazo: '2026-11-23', status: 'EM ANDAMENTO', primeiro_apontamento: '2026-11-18' },
+      { id: 2, codigo: 'TPE-002.0', data_inicio: '2026-11-24', prazo: '2026-11-25' },
+      { id: 3, codigo: 'TPE-003.0', data_inicio: '2026-11-26', prazo: '2026-11-30' },
+    ], S, new Map(), '2026-11-25')
+    expect(r[0]).toMatchObject({ mudou: false, iniciada: true, fimEfetivo: '2026-11-25', desvio: 2 })
+    expect(r[1].para).toEqual(['2026-11-26', '2026-11-27'])
+    expect(r[1].desvio).toBe(2)
+    expect(r[2].para).toEqual(['2026-11-30', '2026-12-02'])
+  })
+  it('TPE que começou antes do planejado puxa as seguintes', () => {
+    const r = reprogramarFila([
+      { id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-23', prazo: '2026-11-27', status: 'EM ANDAMENTO', primeiro_apontamento: '2026-11-19' },
+      { id: 2, codigo: 'TPE-002.0', data_inicio: '2026-11-30', prazo: '2026-12-01' },
+    ], S, new Map(), '2026-11-20')
+    expect(r[0]).toMatchObject({ fimEfetivo: '2026-11-25', desvio: -2, mudou: false })
+    expect(r[1].para).toEqual(['2026-11-26', '2026-11-27'])
+    expect(r[1].desvio).toBe(-2)
+  })
+  it('tarefa não iniciada nunca vai para antes de hoje', () => {
+    const r = reprogramarFila([{ id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-16', prazo: '2026-11-17' }], S, new Map(), '2026-11-25')
+    expect(r[0].para).toEqual(['2026-11-25', '2026-11-26'])
+  })
+  it('sem atraso nem mudança, nada muda', () => {
+    const r = reprogramarFila([
+      { id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-23', prazo: '2026-11-24', status: 'EM ANDAMENTO', primeiro_apontamento: '2026-11-23' },
+      { id: 2, codigo: 'TPE-002.0', data_inicio: '2026-11-25', prazo: '2026-11-26' },
+    ], S, new Map(), '2026-11-23')
+    expect(r.some((x) => x.mudou)).toBe(false)
+  })
+})
