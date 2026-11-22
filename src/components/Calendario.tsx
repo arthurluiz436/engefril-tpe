@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { dataBR, hm, hojeISO, somaDias } from '../lib/formato'
+import { dataBR, hm, hojeISO, osBR, somaDias } from '../lib/formato'
 import { corRecurso, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 import { Dialogo, Icone } from './ui'
 
@@ -72,6 +72,7 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
     return [
       `${e.tpe_codigo}${e.grupo ? ` · ${e.grupo}` : ''}`,
       t?.descricao,
+      t?.os != null ? `O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}` : '',
       `Projetista: ${e.recurso_nome ?? nome.get(String(e.recurso_id)) ?? '—'}`,
       `Apontamento: ${dataBR(e.dia)}, ${e.hora_inicio.slice(0, 5)}–${e.hora_fim.slice(0, 5)} (${hm(Number(e.horas_totais))}${extra})`,
       e.descricao ? `O que foi feito: ${e.descricao}` : '',

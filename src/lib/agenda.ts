@@ -132,3 +132,28 @@ export function diasDeFeriasNoPeriodo(ini: string, fim: string, feriados: Set<st
   for (const d of f) if (d >= ini && d <= fim && ehDiaUtil(d, feriados)) n++
   return n
 }
+
+// ---------------------------------------------------------------- carga diária e sobrecarga
+/**
+ * Tarefas em aberto que ocupam a pessoa em cada dia útil, pelo período planejado (início → prazo);
+ * tarefa atrasada continua ocupando do prazo até hoje.
+ * Sobrecarga: soma de "pesos" > 1 no dia — 1 no meio da tarefa e 0,5 no dia de início ou do prazo.
+ * Assim, uma tarefa que termina e outra que começa no mesmo dia (passagem) não contam como sobrecarga.
+ */
+export function cargaDiaria<T extends { data_inicio?: string | null; prazo?: string | null }>(
+  tarefas: T[], naoUteis: Set<string>, hoje: string, desde?: string,
+): { carga: Map<string, T[]>; sobre: Set<string> } {
+  const carga = new Map<string, T[]>(), peso = new Map<string, number>()
+  for (const t of tarefas) {
+    const a = t.data_inicio ? String(t.data_inicio).slice(0, 10) : null
+    const p = t.prazo ? String(t.prazo).slice(0, 10) : null
+    const b = p && p < hoje ? hoje : p
+    if (!a || !b || b < a) continue
+    for (let x = desde && a < desde ? desde : a, k = 0; x <= b && k < 400; x = somaDiasCorridos(x, 1), k++) {
+      if (!ehDiaUtil(x, naoUteis)) continue
+      carga.set(x, [...(carga.get(x) ?? []), t])
+      peso.set(x, (peso.get(x) ?? 0) + (a === b ? 1 : x === a || x === b ? 0.5 : 1))
+    }
+  }
+  return { carga, sobre: new Set([...peso].filter(([, w]) => w > 1.001).map(([x]) => x)) }
+}

@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { dataBR, diasEntre, hojeISO, osBR, somaDias } from '../lib/formato'
-import { clarear, corRecurso, diasDeAusencia, ehDiaUtil, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
+import { cargaDiaria, clarear, corRecurso, diasDeAusencia, ehDiaUtil, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 
 /**
  * Cronograma (Gantt) da equipe, uma faixa por projetista (swimlane) na cor dele.
@@ -52,12 +52,12 @@ type Linha =
   | { tipo: 'pista'; y: number; h: number; pista: Pista }
   | { tipo: 'tarefa'; y: number; h: number; pista: Pista; t: any; rot: string; feita: boolean; zebra: boolean }
   | { tipo: 'carga'; y: number; h: number; pista: Pista }
-interface Pista { id: string; nome: string; cor: string; abertas: any[]; concluidas: any[]; carga: Map<string, any[]>; ausente: Set<string> }
+interface Pista { id: string; nome: string; cor: string; abertas: any[]; concluidas: any[]; carga: Map<string, any[]>; sobre: Set<string>; ausente: Set<string> }
 
 export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
     mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS } = p
-  const ROT = p.rotulo ?? 172
+  const ROT = p.rotulo ?? 206
   const somente = p.somente == null ? null : new Set(Array.isArray(p.somente) ? p.somente : [p.somente])
   const hoje = hojeISO()
   const trilhaRef = useRef<HTMLDivElement>(null)
@@ -84,27 +84,10 @@ export default function Gantt(p: GanttProps) {
         const concluidas = !mostrarConcluidas ? [] : base
           .filter((t: any) => String(t.responsavel_id) === id && t.status === 'FINALIZADA' && iso(t.data_fim) && iso(t.data_fim)! >= ini)
           .sort((a, b) => String(a.data_fim).localeCompare(String(b.data_fim)))
-        // carga: tarefas que ocupam a pessoa em cada dia útil.
-        // Em aberto: do início (ou do 1º apontamento, se começou antes) até o prazo — e, se atrasada, até hoje.
-        // Concluídas: período real, do 1º apontamento (ou início) até a finalização (adiantadas e atrasadas).
+        // carga: tarefas em aberto pelo período planejado (atrasadas até hoje); passagem no mesmo dia não é sobrecarga
         const ausente = diasDeAusencia(ausencias, id)
-        const carga = new Map<string, any[]>()
-        const periodo = (t: any): [string | null, string | null] => {
-          const ap = iso(t.primeiro_apontamento), di = iso(t.data_inicio)
-          const a = ap && di ? (ap < di ? ap : di) : ap ?? di
-          if (t.status === 'FINALIZADA') return [ap ?? di, iso(t.data_fim)]
-          const p = iso(t.prazo)
-          return [a, p ? (p < hoje ? hoje : p) : null]
-        }
-        for (const t of [...abertas, ...concluidas]) {
-          const [a, b] = periodo(t)
-          if (!a || !b || b < a) continue
-          for (let x = a < ini ? ini : a, k = 0; x <= b && k < 400; x = somaDias(x, 1), k++) {
-            if (!ehDiaUtil(x, feriados) || ausente.has(x)) continue
-            carga.set(x, [...(carga.get(x) ?? []), t])
-          }
-        }
-        return { id, nome: r.nome as string, cor, abertas, concluidas, carga, ausente }
+        const { carga, sobre } = cargaDiaria(abertas, new Set([...feriados, ...ausente]), hoje, ini)
+        return { id, nome: r.nome as string, cor, abertas, concluidas, carga, sobre, ausente }
       })
       .filter((pi) => pi.abertas.length || pi.concluidas.length || pi.id === destaque)
     let fim = hoje
@@ -216,6 +199,7 @@ export default function Gantt(p: GanttProps) {
     const pred = t.predecessora_id ? porId.get(t.predecessora_id) : null
     const dica = [
       `${t.codigo} · ${t.grupo ?? ''}`, t.descricao,
+      t.os != null ? `O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}` : '',
       `Planejado: ${dataBR(iniPlan)} → ${dataBR(prazo)}`,
       `Realizado: ${iniReal ? `${dataBR(iniReal)} → ${l.feita ? dataBR(fimReal) : t.status === 'EM ANDAMENTO' ? 'em andamento' : `último registro ${dataBR(fimReal)}`}` : 'sem apontamentos'}`,
       atraso ? `${l.feita ? 'Concluída' : 'Está'} ${plural(atraso, 'dia', 'dias')} após o prazo` : prazo ? (l.feita ? 'Concluída no prazo' : 'Dentro do prazo') : 'Sem prazo definido',
@@ -270,7 +254,7 @@ export default function Gantt(p: GanttProps) {
               if (l.tipo === 'pista') {
                 const pi = l.pista
                 const atrasadas = pi.abertas.filter((t) => t.prazo && iso(t.prazo)! < hoje).length
-                const sobre = [...pi.carga.values()].filter((v) => v.length > 1).length
+                const sobre = pi.sobre.size
                 const cab = <>
                   <span className="g2-ponto" style={{ background: pi.cor }} />
                   <strong>{pi.nome}</strong>
@@ -288,10 +272,12 @@ export default function Gantt(p: GanttProps) {
               const atrasada = !l.feita && t.prazo && iso(t.prazo)! < hoje
               return (
                 <div key={`r${t.id}`} className={`g2-rot-tarefa ${l.zebra ? 'zebra' : ''} ${selecionada === t.id ? 'sel' : ''} ${l.feita ? 'feita' : ''}`}
-                  style={{ top: l.y, height: l.h, borderLeftColor: l.pista.cor }} title={`${t.codigo} · ${t.descricao ?? ''}`}
+                  style={{ top: l.y, height: l.h, borderLeftColor: l.pista.cor }} title={`${t.codigo} · O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}
+${t.descricao ?? ''}`}
                   onClick={aoSelecionar ? () => aoSelecionar(t) : undefined}>
                   <span className={`gantt-n ${atrasada ? 'atrasada' : ''} ${l.feita ? 'ok' : ''}`}>{l.rot}</span>
                   <span className="gantt-cod">{t.codigo}</span>
+                  {t.os != null && <span className="g2-os" title={`O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}`}>OS {osBR(t.os)}</span>}
                   {outro && <span className="g2-passa" style={{ borderColor: donoPred!.cor, color: donoPred!.cor }} title={`Depende de ${pred.codigo}, feita por ${donoPred!.nome}`}>←{String(pred.codigo).replace('TPE-', '')}</span>}
                 </div>)
             })}
@@ -317,7 +303,7 @@ export default function Gantt(p: GanttProps) {
               {/* sobrecarga na faixa do projetista */}
               {linhas.map((l) => l.tipo !== 'pista' ? null : (
                 <Fragment key={`sc${l.pista.id}`}>
-                  {[...l.pista.carga.entries()].filter(([x, v]) => v.length > 1 && x >= ini && x <= fim).map(([x, v]) => (
+                  {[...l.pista.carga.entries()].filter(([x]) => l.pista.sobre.has(x) && x >= ini && x <= fim).map(([x, v]) => (
                     <rect key={x} x={X(x) + 1} y={l.y + l.h - 7} width={Math.max(2, dx - 2)} height={5} rx={2} fill="var(--vermelho)" opacity={0.75}>
                       <title>{`${dataBR(x)}: ${v.length} tarefas ao mesmo tempo (${v.map((t) => t.codigo).join(', ')})`}</title>
                     </rect>))}
@@ -327,10 +313,10 @@ export default function Gantt(p: GanttProps) {
                 <Fragment key={`cg${l.pista.id}`}>
                   {[...l.pista.carga.entries()].filter(([x]) => x >= ini && x <= fim).map(([x, v]) => (
                     <g key={x}>
-                      <rect x={X(x) + 1} y={l.y + 3} width={Math.max(2, dx - 2)} height={l.h - 6} rx={2} fill={v.length > 1 ? 'var(--vermelho)' : clarear(l.pista.cor, 0.55)} opacity={v.length > 1 ? 0.85 : 1}>
-                        <title>{`${dataBR(x)}: ${v.length} tarefa(s) — ${v.map((t) => t.codigo).join(', ')}`}</title>
+                      <rect x={X(x) + 1} y={l.y + 3} width={Math.max(2, dx - 2)} height={l.h - 6} rx={2} fill={l.pista.sobre.has(x) ? "var(--vermelho)" : clarear(l.pista.cor, 0.55)} opacity={l.pista.sobre.has(x) ? 0.85 : 1}>
+                        <title>{`${dataBR(x)}: ${v.length} tarefa(s)${v.length > 1 && !l.pista.sobre.has(x) ? " (troca: uma termina e outra começa)" : ""} — ${v.map((t) => t.codigo).join(', ')}`}</title>
                       </rect>
-                      {dx >= 14 && <text x={X(x) + dx / 2} y={l.y + l.h / 2 + 4} textAnchor="middle" className="g2-carga-n" fill={v.length > 1 ? '#fff' : 'var(--grafite-900)'}>{v.length}</text>}
+                      {dx >= 14 && <text x={X(x) + dx / 2} y={l.y + l.h / 2 + 4} textAnchor="middle" className="g2-carga-n" fill={l.pista.sobre.has(x) ? "#fff" : "var(--grafite-900)"}>{v.length}</text>}
                     </g>))}
                 </Fragment>))}
               {/* férias / ausências na faixa do projetista */}

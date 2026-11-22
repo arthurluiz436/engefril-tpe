@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
@@ -15,6 +15,12 @@ const FILTROS = [
   ['PAUSADA', 'Pausadas'], ['FINALIZADA', 'Finalizadas'], ['todas', 'Todas'],
 ] as const
 type Filtro = (typeof FILTROS)[number][0]
+type Campo = 'tpe' | 'os' | 'grupo' | 'resp' | 'status' | 'inicio' | 'prazo' | 'horas'
+const VALOR: Record<Campo, (t: any) => any> = {
+  tpe: (t) => t.numero * 1000 + t.revisao, os: (t) => Number(t.os), grupo: (t) => `${t.principal} › ${t.grupo}`.toLowerCase(),
+  resp: (t) => (t.responsavel ?? '').toLowerCase(), status: (t) => STATUS.indexOf(t.status), inicio: (t) => t.data_inicio ? String(t.data_inicio).slice(0, 10) : null,
+  prazo: (t) => t.prazo ? String(t.prazo).slice(0, 10) : null, horas: (t) => Number(t.horas_totais ?? 0),
+}
 const iniciada = (t: any) => t && (t.status !== 'NÃO INICIADA' || Number(t.qtd_apontamentos ?? 0) > 0)
 
 export default function Tpes() {
@@ -25,6 +31,9 @@ export default function Tpes() {
   const [busca, setBusca] = useState('')
   const [fStatus, setFStatus] = useState<Filtro>('abertas')
   const [fResp, setFResp] = useState('')
+  const [fPrincipal, setFPrincipal] = useState('')
+  const [fGrupo, setFGrupo] = useState('')
+  const [ord, setOrd] = useState<{ campo: Campo; dir: 1 | -1 }>({ campo: 'tpe', dir: -1 })
   const [catalogo, setCatalogo] = useState<any[]>([])
   const [ed, setEd] = useState<any | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -44,6 +53,8 @@ export default function Tpes() {
     const vazio = Object.fromEntries(FILTROS.map(([k]) => [k, 0])) as Record<Filtro, number>
     if (!base) return { linhas: [], contagem: vazio }
     let ls: any[] = linhasDe('tpes', base).filter((t: any) => t.arquivada !== 'SIM')
+    if (fPrincipal) ls = ls.filter((t) => t.principal === fPrincipal)
+    if (fGrupo) ls = ls.filter((t) => t.grupo === fGrupo)
     if (fResp === '-') ls = ls.filter((t) => !t.responsavel_id); else if (fResp) ls = ls.filter((t) => String(t.responsavel_id) === fResp)
     if (filtro === 'semresp') ls = ls.filter((t) => !t.responsavel_id && t.status !== 'FINALIZADA')
     if (filtro === 'atrasadas') ls = ls.filter((t) => t.situacao_prazo === 'ATRASADA')
@@ -54,9 +65,27 @@ export default function Tpes() {
     const passa = (t: any, f: Filtro) => f === 'todas' || (f === 'abertas' ? t.status !== 'FINALIZADA' : f === 'atrasadas' ? t.situacao_prazo === 'ATRASADA' : t.status === f)
     const contagem = { ...vazio }
     for (const [k] of FILTROS) contagem[k] = ls.filter((t) => passa(t, k)).length
-    const linhas = ls.filter((t) => passa(t, fStatus)).sort((a, z) => z.numero - a.numero || z.revisao - a.revisao)
+    const vazioFim = (v: any) => (v == null || v === '' ? null : v)
+    const cmp = (a: any, z: any) => {
+      const va = vazioFim(VALOR[ord.campo](a)), vz = vazioFim(VALOR[ord.campo](z))
+      if (va == null || vz == null) return va == null && vz == null ? 0 : va == null ? 1 : -1 // vazios sempre no fim
+      return (va < vz ? -1 : va > vz ? 1 : 0) * ord.dir || (a.numero - z.numero) * ord.dir || a.revisao - z.revisao
+    }
+    const linhas = ls.filter((t) => passa(t, fStatus)).sort(cmp)
     return { linhas, contagem }
-  }, [base, busca, fStatus, fResp, filtro])
+  }, [base, busca, fStatus, fResp, fPrincipal, fGrupo, ord, filtro])
+  const opcoesPrincipal = useMemo(() => [...new Set((base?.tpes ?? []).map((t: any) => t.principal as string))].filter(Boolean).sort(), [base])
+  const opcoesGrupo = useMemo(() => [...new Set((base?.tpes ?? []).filter((t: any) => !fPrincipal || t.principal === fPrincipal).map((t: any) => t.grupo as string))].filter(Boolean).sort(), [base, fPrincipal])
+  /** cabeçalho que ordena ao clicar (1º clique: menor → maior; 2º: maior → menor) */
+  const Ord2 = ({ campo, children }: { campo: Campo; children: ReactNode }) => {
+    const ativo = ord.campo === campo
+    return (
+      <button type="button" className={`th-ordem ${ativo ? 'ativo' : ''}`} title="Ordenar (clique de novo para inverter)" onClick={() => setOrd({ campo, dir: ativo ? (ord.dir === 1 ? -1 : 1) : 1 })}>
+        {children}<span className="seta-ordem" aria-hidden="true">{ativo ? (ord.dir === 1 ? '▲' : '▼') : '↕'}</span>
+      </button>)
+  }
+  const Ord = ({ campo, children, num }: { campo: Campo; children: ReactNode; num?: boolean }) => (
+    <th className={num ? 'num' : ''} aria-sort={ord.campo === campo ? (ord.dir === 1 ? 'ascending' : 'descending') : 'none'}><Ord2 campo={campo}>{children}</Ord2></th>)
 
   /** Próximo código: reaproveita o menor número livre (ex.: apagou a TPE-002 → a próxima é a 002). */
   function proximoCodigo() {
@@ -187,8 +216,11 @@ export default function Tpes() {
       {filtro && <Aviso tipo="info">Filtro aplicado pelo painel: <strong>{{ semresp: 'sem responsável', atrasadas: 'prazo vencido', breve: 'vencem em até 3 dias', semprazo: 'sem prazo' }[filtro]}</strong>. <a href="#" onClick={(e) => { e.preventDefault(); qs.delete('f'); setQs(qs) }}>Remover</a></Aviso>}
       <div className="row nao-imprimir">
         <input type="search" placeholder="Buscar TPE, cliente, descrição, responsável…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 340 }} aria-label="Buscar" />
+        <select value={fPrincipal} onChange={(e) => { setFPrincipal(e.target.value); setFGrupo('') }} aria-label="Principal" style={{ maxWidth: 200 }}><option value="">Todos os principais</option>{opcoesPrincipal.map((x) => <option key={x}>{x}</option>)}</select>
+        <select value={fGrupo} onChange={(e) => setFGrupo(e.target.value)} aria-label="Grupo" style={{ maxWidth: 240 }}><option value="">Todos os grupos</option>{opcoesGrupo.map((x) => <option key={x}>{x}</option>)}</select>
         <select value={fResp} onChange={(e) => setFResp(e.target.value)} aria-label="Responsável" style={{ maxWidth: 200 }}><option value="">Todos os responsáveis</option><option value="-">Sem responsável</option>{base.recursos.map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select>
       </div>
+      {(fPrincipal || fGrupo || fResp || busca) && <div className="small muted nao-imprimir">Filtros: {[fPrincipal, fGrupo, fResp && (fResp === '-' ? 'sem responsável' : base.recursos.find((r: any) => String(r.id) === fResp)?.nome), busca && `“${busca}”`].filter(Boolean).join(' · ')} · <a href="#" onClick={(e) => { e.preventDefault(); setFPrincipal(''); setFGrupo(''); setFResp(''); setBusca('') }}>Limpar</a></div>}
       <div className="segmentos rolavel nao-imprimir" role="group" aria-label="Filtrar por status">
         {FILTROS.map(([k, r]) => (
           <button key={k} type="button" aria-pressed={fStatus === k} className={k === 'atrasadas' && contagem.atrasadas ? 'tem-atraso' : ''} onClick={() => setFStatus(k)}>
@@ -196,7 +228,7 @@ export default function Tpes() {
       </div>
       <div className="rolagem">
         {linhas.length === 0 ? <Vazio>Nenhuma TPE com estes filtros.</Vazio> : (
-          <table className="tabela"><thead><tr><th>TPE</th><th>O.S. / cliente</th><th>Principal › grupo</th><th>Descrição</th><th>Responsável</th><th>Status</th><th>Início → prazo</th><th className="num">Horas</th><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th></th></tr></thead>
+          <table className="tabela"><thead><tr><Ord campo="tpe">TPE</Ord><Ord campo="os">O.S. / cliente</Ord><Ord campo="grupo">Principal › grupo</Ord><th>Descrição</th><Ord campo="resp">Responsável</Ord><Ord campo="status">Status</Ord><th><span className="row" style={{ gap: 2, flexWrap: 'nowrap' }}><Ord2 campo="inicio">Início</Ord2> → <Ord2 campo="prazo">prazo</Ord2></span></th><Ord campo="horas" num>Horas</Ord><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th></th></tr></thead>
             <tbody>{linhas.map((t: any) => {
               const p: any = t.predecessora_id ? porId.get(t.predecessora_id) : null
               return (

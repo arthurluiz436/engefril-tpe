@@ -1,6 +1,6 @@
 // Calendário de dias úteis e reprogramação de fila (Sequência por projetista).
 import { describe, expect, it } from 'vitest'
-import { diasDeFeriasNoPeriodo, diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoNumeroTpe, reprogramarFila } from '../../src/lib/agenda'
+import { cargaDiaria, diasDeFeriasNoPeriodo, diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoNumeroTpe, reprogramarFila } from '../../src/lib/agenda'
 
 const F = new Set(['2026-11-20']) // feriado numa sexta
 
@@ -64,5 +64,28 @@ describe('Férias no cálculo de datas', () => {
   })
   it('férias de outra pessoa não interferem', () => {
     expect(indisponiveis(new Set(['2026-12-25']), [{ recurso_id: 2, inicio: '2026-12-07', fim: '2026-12-18' }], 1)).toEqual(new Set(['2026-12-25']))
+  })
+})
+
+describe('Carga diária e sobrecarga', () => {
+  const H = '2026-11-01'
+  it('uma tarefa termina e a próxima começa no mesmo dia: passagem, não sobrecarga', () => {
+    const { carga, sobre } = cargaDiaria([
+      { data_inicio: '2026-11-16', prazo: '2026-11-18' },
+      { data_inicio: '2026-11-18', prazo: '2026-11-20' },
+    ], new Set(), H)
+    expect(carga.get('2026-11-18')!.length).toBe(2)
+    expect(sobre.size).toBe(0)
+  })
+  it('duas tarefas no meio do período: sobrecarga', () => {
+    const { sobre } = cargaDiaria([
+      { data_inicio: '2026-11-16', prazo: '2026-11-20' },
+      { data_inicio: '2026-11-17', prazo: '2026-11-19' },
+    ], new Set(), H)
+    expect([...sobre].sort()).toEqual(['2026-11-17', '2026-11-18', '2026-11-19'])
+  })
+  it('tarefa atrasada ocupa até hoje', () => {
+    const { carga } = cargaDiaria([{ data_inicio: '2026-11-16', prazo: '2026-11-17' }], new Set(), '2026-11-20')
+    expect(carga.has('2026-11-20')).toBe(true)
   })
 })

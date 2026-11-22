@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { prazosDasOS } from '../../lib/dados'
 import { dataBR, diasEntre, h1, hojeISO, osBR, somaDias } from '../../lib/formato'
-import { corRecurso, ehDiaUtil } from '../../lib/agenda'
+import { cargaDiaria, corRecurso, indisponiveis } from '../../lib/agenda'
 import { Cabecalho, Carregando, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
 import Gantt from '../../components/Gantt'
 
@@ -48,12 +48,10 @@ export default function Cronograma() {
     // sobrecarga: dias úteis em que o projetista tem 2+ tarefas planejadas ao mesmo tempo
     const sobrecarga = base.recursos.map((r: any, i: number) => {
       const minhas = ativas.filter((t: any) => String(t.responsavel_id) === String(r.id) && t.data_inicio && t.prazo)
-      const dias = new Map<string, string[]>()
-      for (const t of minhas) for (let x = String(t.data_inicio).slice(0, 10), k = 0; x <= String(t.prazo).slice(0, 10) && k < 400; x = somaDias(x, 1), k++) {
-        if (x < hoje || !ehDiaUtil(x, base.feriados)) continue
-        dias.set(x, [...(dias.get(x) ?? []), t.codigo])
-      }
-      const cheios = [...dias.entries()].filter(([, v]) => v.length > 1).sort(([a], [b]) => a.localeCompare(b))
+      // mesma regra do gráfico: passagem (uma termina e outra começa no mesmo dia) não é sobrecarga
+      const { carga, sobre } = cargaDiaria(minhas, indisponiveis(base.feriados, base.ausencias, r.id), hoje, hoje)
+      const cheios = [...carga.entries()].filter(([x]) => sobre.has(x)).map(([x, v]) => [x, v.map((t: any) => t.codigo)] as [string, string[]])
+        .sort(([a], [b]) => a.localeCompare(b))
       return { r, cor: corRecurso(r, i), cheios }
     }).filter((x: any) => x.cheios.length)
     // o que vem pela frente (próximos 10 dias): inícios e prazos
@@ -156,7 +154,7 @@ export default function Cronograma() {
               <tr key={i} style={{ cursor: 'pointer' }} onClick={() => setSel(f.t)}><td className="sem-quebra">{dataBR(f.d)}</td><td><span className={`badge ${f.tipo === 'Prazo' ? 'ambar' : 'azul'}`}>{f.tipo}</span></td><td><strong>{f.t.codigo}</strong> <span className="small muted">{f.t.grupo}</span></td><td className="small">{f.t.responsavel ?? '—'}</td></tr>))}</tbody></table>)}
         </div>
       </div>
-      <p className="muted small">Como ler: cada faixa colorida é um projetista. A barra clara é o <strong>planejado</strong> (linha de base) e a escura é o <strong>realizado</strong>; a diferença entre elas mostra adiantamento ou atraso. Setas tracejadas na cor de outro projetista indicam que a TPE <strong>passa de uma pessoa para outra</strong>. Marcas vermelhas na faixa indicam <strong>sobrecarga</strong> (duas ou mais tarefas planejadas no mesmo dia útil).</p>
+      <p className="muted small">Como ler: cada faixa colorida é um projetista. A barra clara é o <strong>planejado</strong> (linha de base) e a escura é o <strong>realizado</strong>; a diferença entre elas mostra adiantamento ou atraso. Setas tracejadas na cor de outro projetista indicam que a TPE <strong>passa de uma pessoa para outra</strong>. Marcas vermelhas na faixa indicam <strong>sobrecarga</strong> (duas ou mais tarefas planejadas no mesmo dia útil). Quando uma tarefa termina e a próxima começa no mesmo dia, é passagem e não conta como sobrecarga.</p>
     </div>
   )
 }

@@ -368,3 +368,15 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 .disp-resp > div { flex: 1 1 260px; }
 .disp-resp > svg { color: var(--cor-resp); flex: none; }
 .disp-resp.conflito { background: var(--ambar-50); border-color: #f5d9a8; }
+
+/* Cabeçalhos de tabela que ordenam ao clicar */
+.th-ordem { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font: inherit; color: inherit; white-space: nowrap; border-radius: 4px; }
+.th-ordem:hover { color: var(--azul); }
+.th-ordem:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+.th-ordem .seta-ordem { font-size: .7em; opacity: .45; }
+.th-ordem.ativo { color: var(--azul); }
+.th-ordem.ativo .seta-ordem { opacity: 1; }
+th.num .th-ordem { justify-content: flex-end; }
+/* Cronograma: O.S. ao lado do código da TPE */
+.g2-os { flex: none; font-size: .68rem; font-weight: 600; color: var(--grafite-700, #484a4e); background: var(--cinza-100); border-radius: 4px; padding: 0 5px; line-height: 1.5; white-space: nowrap; }
+.g2-rot-tarefa .g2-passa { flex: none; }
