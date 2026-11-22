@@ -11,6 +11,11 @@ export function somaDias(iso: string, n: number): string {
   const [a, m, d] = iso.split('-').map(Number)
   return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10)
 }
+/** Número da O.S. sempre com 6 dígitos: 61922 → "061922". */
+export function osBR(os?: number | string | null): string {
+  if (os == null || os === '') return '—'
+  return String(os).replace(/\D/g, '').padStart(6, '0')
+}
 /** Dias corridos de a até b (positivo quando b é depois de a). */
 export function diasEntre(a: string, b: string): number {
   const utc = (s: string) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d) }

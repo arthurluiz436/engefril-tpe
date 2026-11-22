@@ -53,7 +53,7 @@ export default function Integridade() {
     try {
       const ExcelJS = (await import('exceljs')).default
       const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await f.arrayBuffer())
-      const k = indicadores(base.aps, base.tpes, base.os, base.recursos.map((r: any) => r.nome), paraParametros(base.parametros), base.feriados)
+      const k = indicadores(base.aps, base.tpes, base.os, base.recursos.map((r: any) => r.nome), paraParametros(base.parametros), base.feriados, { agruparRevisoes: false })
       const itens = reconciliar(wb, k)
       const execucao = crypto.randomUUID()
       const linhas = itens.map((i) => {

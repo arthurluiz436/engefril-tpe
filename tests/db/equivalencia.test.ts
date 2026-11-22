@@ -94,7 +94,7 @@ d('Importação da VER_035', () => {
     const tpes = (await como(db, master, (q) => q(`select codigo, os, principal, grupo, status, to_char(data_inicio,'YYYY-MM-DD') data_inicio, to_char(data_fim,'YYYY-MM-DD') data_fim, revisao from tpes`)))
     const oss = await como(db, master, (q) => q(`select os, nome, nivel, vendedor, classificacao from ordens_servico`))
     const fer = new Set(payload.feriados.map((f) => f.data))
-    const k = indicadores(aps as any, tpes as any, oss as any, Object.keys(fx.recursos), PARAMETROS_VER035, fer)
+    const k = indicadores(aps as any, tpes as any, oss as any, Object.keys(fx.recursos), PARAMETROS_VER035, fer, { agruparRevisoes: false })
     const K = fx.kpi
     const perto = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThan(1e-6)
     expect(k.resumo.inicio).toBe(K.B5); expect(k.resumo.fim).toBe(K.B6)

@@ -171,7 +171,7 @@ export default function Importar() {
 
       {passo === 4 && resultado && (
         <div className="card stack">
-          <Aviso tipo="ok"><strong>Importação gravada.</strong> Lote nº {resultado.lote_id}. Os dados já aparecem para os projetistas e nas telas do Master.</Aviso>
+          <Aviso tipo="ok"><strong>Importação gravada.</strong> Lote nº {resultado.lote_id}. Os dados já aparecem para os projetistas e nas telas do Supervisor.</Aviso>
           <table className="tabela"><thead><tr><th>Entidade</th><th className="num">Novos</th><th className="num">Atualizados</th><th className="num">Duplicados</th><th className="num">Rejeitados</th></tr></thead>
             <tbody>{ENT.map((e) => { const r = resultado.resumo[e] ?? {}; return <tr key={e}><td>{NOME_ENT[e]}</td><td className="num">{r.inserido ?? 0}</td><td className="num">{r.atualizado ?? 0}</td><td className="num">{r.duplicado ?? 0}</td><td className="num">{r.rejeitado ?? 0}</td></tr> })}</tbody></table>
           <Aviso tipo="info">Próximos passos: confira em Parâmetros os custos H/H e o início padrão de cada projetista; atribua responsáveis às TPEs em aberto; vincule cada login ao seu projetista em Usuários.</Aviso>

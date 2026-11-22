@@ -1,5 +1,6 @@
 import type { ColunaExport } from './exportar'
 import { situacaoPrazo } from './dados'
+import { tpeBase } from './calculo'
 
 export type Conjunto = 'apontamentos' | 'tpes' | 'os'
 export interface Col extends ColunaExport { padrao?: boolean }
@@ -11,7 +12,7 @@ export const COLUNAS: Record<Conjunto, Col[]> = {
     { chave: 'tipo_dia', rotulo: 'Tipo de dia', tipo: 'texto' },
     { chave: 'recurso_nome', rotulo: 'Projetista', tipo: 'texto', padrao: true },
     { chave: 'tpe_codigo', rotulo: 'TPE', tipo: 'texto', padrao: true },
-    { chave: 'os', rotulo: 'O.S.', tipo: 'inteiro', padrao: true },
+    { chave: 'os', rotulo: 'O.S.', tipo: 'inteiro', padrao: true, numFmt: '000000' },
     { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto' },
     { chave: 'principal', rotulo: 'Principal', tipo: 'texto' },
     { chave: 'grupo', rotulo: 'Grupo', tipo: 'texto' },
@@ -30,7 +31,7 @@ export const COLUNAS: Record<Conjunto, Col[]> = {
   ],
   tpes: [
     { chave: 'codigo', rotulo: 'TPE', tipo: 'texto', padrao: true },
-    { chave: 'os', rotulo: 'O.S.', tipo: 'inteiro', padrao: true },
+    { chave: 'os', rotulo: 'O.S.', tipo: 'inteiro', padrao: true, numFmt: '000000' },
     { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', padrao: true },
     { chave: 'cidade', rotulo: 'Cidade', tipo: 'texto' },
     { chave: 'uf', rotulo: 'UF', tipo: 'texto' },
@@ -51,6 +52,7 @@ export const COLUNAS: Record<Conjunto, Col[]> = {
     { chave: 'horas_normais', rotulo: 'Horas normais (h)', tipo: 'horas' },
     { chave: 'horas_extras', rotulo: 'Horas extras (h)', tipo: 'horas' },
     { chave: 'horas_totais', rotulo: 'Horas totais (h)', tipo: 'horas', padrao: true },
+    { chave: 'horas_tarefa', rotulo: 'Horas da TPE com revisões (h)', tipo: 'horas' },
     { chave: 'estimativa_horas', rotulo: 'Horas estimadas (média do grupo)', tipo: 'horas' },
     { chave: 'consumo', rotulo: 'Consumo horas ÷ estimativa', tipo: 'pct' },
     { chave: 'custo_total', rotulo: 'Custo (R$)', tipo: 'moeda' },
@@ -60,7 +62,7 @@ export const COLUNAS: Record<Conjunto, Col[]> = {
     { chave: 'arquivada', rotulo: 'Arquivada', tipo: 'texto' },
   ],
   os: [
-    { chave: 'os', rotulo: 'O.S.', tipo: 'inteiro', padrao: true },
+    { chave: 'os', rotulo: 'O.S.', tipo: 'inteiro', padrao: true, numFmt: '000000' },
     { chave: 'nome', rotulo: 'Cliente', tipo: 'texto', padrao: true },
     { chave: 'uf', rotulo: 'UF', tipo: 'texto', padrao: true },
     { chave: 'cidade', rotulo: 'Cidade', tipo: 'texto', padrao: true },
@@ -106,17 +108,24 @@ export function linhasDe(conj: Conjunto, base: { aps: any[]; tpes: any[]; os: an
   const osMap = new Map(base.os.map((o) => [o.os, o]))
   if (conj === 'apontamentos') return base.aps.map((a) => ({ ...a, cliente: osMap.get(a.os)?.nome ?? '' }))
   if (conj === 'tpes') {
-    // estimativa = média das horas das TPEs com horas do mesmo principal+grupo (regra da coluna T da VER_035)
+    // estimativa = média das horas das TPEs com horas do mesmo principal+grupo (regra da coluna T da VER_035),
+    // contando cada TPE uma vez só: as horas das revisões (.1, .2…) somam na TPE original.
+    const porBase = new Map<string, { h: number; principal: string; grupo: string }>()
+    for (const t of base.tpes) {
+      const k = tpeBase(t.codigo); const x = porBase.get(k) ?? { h: 0, principal: t.principal, grupo: t.grupo }
+      x.h += t.horas_totais; porBase.set(k, x)
+    }
     const medias = new Map<string, { s: number; n: number }>()
     const mediasP = new Map<string, { s: number; n: number }>()
-    for (const t of base.tpes) if (t.horas_totais > 0) {
-      const k = `${t.principal}|${t.grupo}`; const m = medias.get(k) ?? { s: 0, n: 0 }; m.s += t.horas_totais; m.n++; medias.set(k, m)
-      const mp = mediasP.get(t.principal) ?? { s: 0, n: 0 }; mp.s += t.horas_totais; mp.n++; mediasP.set(t.principal, mp)
+    for (const t of porBase.values()) if (t.h > 0) {
+      const k = `${t.principal}|${t.grupo}`; const m = medias.get(k) ?? { s: 0, n: 0 }; m.s += t.h; m.n++; medias.set(k, m)
+      const mp = mediasP.get(t.principal) ?? { s: 0, n: 0 }; mp.s += t.h; mp.n++; mediasP.set(t.principal, mp)
     }
     return base.tpes.map((t) => {
       const m = medias.get(`${t.principal}|${t.grupo}`) ?? mediasP.get(t.principal)
       const est = m ? m.s / m.n : null
-      return { ...t, estimativa_horas: est, consumo: est ? t.horas_totais / est : null,
+      const hTarefa = porBase.get(tpeBase(t.codigo))?.h ?? t.horas_totais
+      return { ...t, horas_tarefa: hTarefa, estimativa_horas: est, consumo: est ? hTarefa / est : null,
         situacao_prazo: situacaoPrazo(t.prazo, t.status), arquivada: t.arquivada ? 'SIM' : '' }
     })
   }

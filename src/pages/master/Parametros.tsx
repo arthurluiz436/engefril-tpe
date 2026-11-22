@@ -41,6 +41,8 @@ export default function Parametros() {
     exec(supabase.from('custos_hh').upsert({ recurso_id: r.id, valor, vigente_desde: desde }, { onConflict: 'recurso_id,vigente_desde' }), 'Custo registrado com vigência.')
   }
   const atual = params.find((p) => p.vigente_desde <= hojeISO())
+  // migração da jornada flexível ainda não aplicada no banco → coluna não vem na leitura
+  const semFlex = recursos.length > 0 && !('jornada_flexivel' in recursos[0])
   return (
     <div className="stack">
       {elemento}
@@ -49,15 +51,33 @@ export default function Parametros() {
         <button key={k} role="tab" aria-selected={aba === k} className={`btn ${aba === k ? '' : 'sec'}`} onClick={() => setAba(k)}>{t}</button>)}</div>
 
       {aba === 'projetistas' && (
-        <div className="card"><table className="tabela"><thead><tr><th>Projetista</th><th>Início padrão da jornada</th><th>Custo H/H vigente</th><th>Histórico de custos</th><th>Ativo</th><th></th></tr></thead>
+        <div className="card">
+          {semFlex && <Aviso tipo="atencao">A opção de <strong>horário flexível</strong> precisa da migração <code>20261122000006_jornada_flexivel.sql</code> aplicada no Supabase (SQL Editor). Até lá, a coluna fica desativada.</Aviso>}
+          <table className="tabela"><thead><tr><th>Projetista</th><th>Início padrão da jornada</th><th title="O projetista informa, a cada dia, se começou a jornada em um dos horários permitidos">Horário flexível</th><th>Custo H/H vigente</th><th>Histórico de custos</th><th>Ativo</th><th></th></tr></thead>
           <tbody>{recursos.map((r) => (
             <tr key={r.id}><td>{r.nome}</td>
               <td><input type="time" defaultValue={String(r.inicio_padrao).slice(0, 5)} style={{ maxWidth: 120 }} onBlur={(e) => e.target.value !== String(r.inicio_padrao).slice(0, 5) && exec(supabase.from('recursos').update({ inicio_padrao: e.target.value }).eq('id', r.id), 'Início padrão atualizado.')} aria-label="Início padrão" /></td>
+              <td style={{ minWidth: 210 }}>
+                <label className="row small" style={{ gap: 6, fontWeight: 600 }}>
+                  <input type="checkbox" style={{ width: 16, minHeight: 0 }} disabled={semFlex} checked={!!r.jornada_flexivel}
+                    onChange={(e) => exec(supabase.from('recursos').update({ jornada_flexivel: e.target.checked }).eq('id', r.id), e.target.checked ? `${r.nome} passa a informar a jornada de cada dia.` : 'Horário flexível desativado.')} aria-label={`Horário flexível de ${r.nome}`} />
+                  {r.jornada_flexivel ? 'Ativo' : 'Não'}
+                </label>
+                {r.jornada_flexivel && (
+                  <input className="small" style={{ marginTop: 6, maxWidth: 180, minHeight: 32, padding: '4px 8px' }} defaultValue={(r.inicios_flexiveis ?? []).map((x: string) => String(x).slice(0, 5)).join(', ')}
+                    aria-label="Horários de início permitidos" title="Horários em que a jornada pode começar, separados por vírgula"
+                    onBlur={(e) => {
+                      const hs = [...new Set(e.target.value.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean).map((x) => (/^\d{1,2}$/.test(x) ? `${x.padStart(2, '0')}:00` : x)))].sort()
+                      if (!hs.length || hs.some((x) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(x) || x < '05:00' || x > '12:00')) return avisar('erro', 'Use horários entre 05:00 e 12:00, separados por vírgula (ex.: 07:00, 08:00).')
+                      if (hs.join(',') !== (r.inicios_flexiveis ?? []).map((x: string) => String(x).slice(0, 5)).join(',')) exec(supabase.from('recursos').update({ inicios_flexiveis: hs }).eq('id', r.id), 'Horários de início atualizados.')
+                    }} />)}
+              </td>
               <td>{custoAtual(r.id) ? reais(custoAtual(r.id).valor) : <span className="badge vermelho">sem custo</span>}</td>
               <td className="small">{custos.filter((c) => c.recurso_id === r.id).map((c) => `${reais(c.valor)} desde ${c.vigente_desde === '2000-01-01' ? 'o início' : dataBR(c.vigente_desde)}`).join(' · ')}</td>
               <td><input type="checkbox" style={{ width: 16, minHeight: 0 }} checked={r.ativo} onChange={(e) => exec(supabase.from('recursos').update({ ativo: e.target.checked }).eq('id', r.id), 'Situação atualizada.')} aria-label="Ativo" /></td>
               <td><button className="btn sec pequeno" onClick={() => novoCusto(r)}>Novo custo</button></td></tr>))}</tbody></table>
-          <p className="muted small">Início padrão: hora em que a jornada começa (07:00 para a maioria; 08:00 para quem trabalha 08–18). Se houver lançamento no dia começando até o “início antecipado”, a jornada começa nele — regra da VER_035.</p></div>
+          <p className="muted small">Início padrão: hora em que a jornada começa (07:00 para a maioria; 08:00 para quem trabalha 08–18). Se houver lançamento no dia começando até o “início antecipado”, a jornada começa nele — regra da VER_035.</p>
+          <p className="muted small"><strong>Horário flexível:</strong> para quem em alguns dias trabalha 07–17 e em outros 08–18. Com a opção ativa, ao registrar atividade o projetista marca em que horário começou a jornada daquele dia, e a hora extra é calculada a partir dele (seg–qui: jornada de {String(atual?.jornada_seg_qui ?? '10:00').slice(0, 5)} h; sexta: {String(atual?.jornada_sex ?? '09:00').slice(0, 5)} h, com almoço).</p></div>
       )}
 
       {aba === 'jornada' && atual && (

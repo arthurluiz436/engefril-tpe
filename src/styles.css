@@ -219,3 +219,34 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 .gantt-hoje { position: absolute; top: 28px; bottom: 0; width: 0; border-left: 2px solid var(--dourado); z-index: 2; pointer-events: none; }
 .gantt-hoje span { position: absolute; top: -26px; left: -1px; transform: translateX(-50%); background: var(--dourado); color: #fff; font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 99px; white-space: nowrap; }
 @media (max-width: 700px) { .gantt { --rot: 100px; } .gantt-cod { font-size: .7rem; } }
+
+/* ---- utilitários de lista */
+.sem-quebra { white-space: nowrap; }
+.btn-finalizar { background: var(--verde); }
+.btn-finalizar:hover { background: #17633a; }
+.segmentos { display: inline-flex; border: 1px solid var(--cinza-300); border-radius: 8px; overflow: hidden; background: #fff; }
+.segmentos button { border: 0; background: none; font: inherit; font-size: .85rem; font-weight: 600; color: var(--grafite); padding: 8px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; min-height: 38px; }
+.segmentos button + button { border-left: 1px solid var(--cinza-200); }
+.segmentos button[aria-pressed='true'] { background: var(--azul); color: #fff; }
+.segmentos .contador { background: var(--cinza-100); color: var(--grafite); border-radius: 99px; padding: 0 7px; font-size: .74rem; }
+.segmentos button[aria-pressed='true'] .contador { background: rgba(255,255,255,.22); color: #fff; }
+.segmentos button.tem-atraso:not([aria-pressed='true']) .contador { background: var(--vermelho); color: #fff; }
+.faixa-atraso { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px; border-radius: var(--raio-sm);
+  background: linear-gradient(90deg, var(--vermelho-50), #fff 70%); box-shadow: inset 4px 0 0 var(--vermelho); border: 1px solid #f3c4bf; }
+.tabela tr.linha-atraso td { background: #fff7f6; }
+.tabela tr.linha-atraso td:first-child { box-shadow: inset 4px 0 0 var(--vermelho); }
+.tabela tr.linha-atraso:hover td { background: var(--vermelho-50); }
+
+/* ---- Início do projetista: apontamentos de hoje */
+.aps-hoje { display: grid; gap: 0; }
+.aps-hoje .ap { display: grid; grid-template-columns: 104px 1fr auto; gap: 12px; align-items: start; padding: 10px 0; border-top: 1px solid var(--cinza-100); }
+.aps-hoje .ap:first-child { border-top: 0; }
+.aps-hoje .faixa { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--grafite-900); }
+.aps-hoje .dur { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--azul-700); white-space: nowrap; }
+.linha-dia { position: relative; height: 10px; border-radius: 99px; background: var(--cinza-100); margin: 4px 0 2px; overflow: hidden; }
+.linha-dia > span { position: absolute; top: 0; bottom: 0; background: var(--azul); border-radius: 99px; }
+.linha-dia > span.extra { background: var(--dourado); }
+.linha-dia > i { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--cinza-300) 0 2px, transparent 2px 5px); }
+@media (max-width: 600px) { .aps-hoje .ap { grid-template-columns: 1fr auto; } .aps-hoje .faixa { grid-column: 1 / -1; } }
+.jornada-flex { border: 1px solid var(--azul-100); background: var(--azul-50); border-radius: var(--raio-sm); padding: 12px 14px; margin: 0; display: grid; gap: 6px; }
+.jornada-flex legend { font-weight: 700; font-size: .9rem; color: var(--grafite-900); padding: 0 4px; }

@@ -27,7 +27,7 @@ export default function Auditoria() {
   }
   return (
     <div className="stack">
-      <Cabecalho titulo="Auditoria" texto="Toda inclusão, alteração e exclusão nas tabelas principais é registrada automaticamente pelo banco (quem, quando, antes e depois). Ninguém, nem o Master, edita este histórico pelo aplicativo." />
+      <Cabecalho titulo="Auditoria" texto="Toda inclusão, alteração e exclusão nas tabelas principais é registrada automaticamente pelo banco (quem, quando, antes e depois). Ninguém, nem o Supervisor, edita este histórico pelo aplicativo." />
       <div className="row">
         <Campo rotulo="Tabela"><select value={tabela} onChange={(e) => setTabela(e.target.value)}><option value="">Todas</option>{TABELAS.map((t) => <option key={t}>{t}</option>)}</select></Campo>
         <Campo rotulo="Ação"><select value={acao} onChange={(e) => setAcao(e.target.value)}><option value="">Todas</option><option>INSERT</option><option>UPDATE</option><option>DELETE</option></select></Campo>

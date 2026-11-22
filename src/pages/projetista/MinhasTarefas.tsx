@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
 import { mensagemErro } from '../../lib/supabase'
-import { dataBR, hm } from '../../lib/formato'
+import { dataBR, hm, osBR } from '../../lib/formato'
 import { Aviso, Cabecalho, Carregando, Selo, SeloPrazo, Vazio } from '../../components/ui'
 
 export default function MinhasTarefas() {
@@ -21,7 +21,7 @@ export default function MinhasTarefas() {
   }, [])
   const lista = (tarefas ?? [])
     .filter((t) => todas || t.status !== 'FINALIZADA')
-    .filter((t) => !busca || `${t.codigo} ${t.cliente} ${t.descricao} ${t.grupo} ${t.os}`.toLowerCase().includes(busca.toLowerCase()))
+    .filter((t) => !busca || `${t.codigo} ${t.cliente} ${t.descricao} ${t.grupo} ${t.os} ${osBR(t.os)}`.toLowerCase().includes(busca.toLowerCase()))
   const primeiraAberta = lista.find((t) => t.status !== 'FINALIZADA')
 
   return (
@@ -46,7 +46,7 @@ export default function MinhasTarefas() {
                   </div>
                   <div style={{ margin: '4px 0' }}>{t.descricao || <span className="muted">Sem descrição</span>}</div>
                   <div className="row small muted" style={{ gap: 14 }}>
-                    <span>O.S. {t.os} · {t.cliente}{t.cidade ? ` — ${t.cidade}/${t.uf}` : ''}</span>
+                    <span>O.S. {osBR(t.os)} · {t.cliente}{t.cidade ? ` — ${t.cidade}/${t.uf}` : ''}</span>
                     <span>Prazo: <strong>{dataBR(t.prazo)}</strong></span>
                     <span>Suas horas: {hm(Number(t.horas_apontadas))}</span>
                     {t.ultimo_apontamento && <span>Último registro: {dataBR(t.ultimo_apontamento)}</span>}
@@ -61,7 +61,7 @@ export default function MinhasTarefas() {
             )
           })}
       </div>
-      <p className="muted small">O status da tarefa é atualizado pelo Master. Registrar horas não marca a tarefa como concluída.</p>
+      <p className="muted small">O status da tarefa é atualizado pelo Supervisor. Registrar horas não marca a tarefa como concluída.</p>
     </div>
   )
 }

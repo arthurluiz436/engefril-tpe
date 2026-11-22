@@ -3,7 +3,7 @@
 import { textoSeguroPlanilha } from './normaliza'
 
 export type TipoColuna = 'texto' | 'numero' | 'inteiro' | 'data' | 'hora' | 'horas' | 'moeda' | 'pct'
-export interface ColunaExport { chave: string; rotulo: string; tipo: TipoColuna; largura?: number }
+export interface ColunaExport { chave: string; rotulo: string; tipo: TipoColuna; largura?: number; /** formato Excel próprio (ex.: '000000' para O.S.) */ numFmt?: string }
 
 const FMT: Record<TipoColuna, string | undefined> = {
   texto: undefined, numero: '#,##0.00', inteiro: '0', data: 'dd/mm/yyyy', hora: 'hh:mm', horas: '#,##0.00', moeda: '"R$" #,##0.00', pct: '0.0%',
@@ -28,7 +28,7 @@ export async function exportarXLSX(arquivo: string, abas: { nome: string; coluna
     const ws = wb.addWorksheet(aba.nome.slice(0, 31).replace(/[\\/?*[\]:]/g, '-'), { views: [{ state: 'frozen', ySplit: 1 }] })
     ws.columns = aba.colunas.map((c) => ({ header: c.rotulo, key: c.chave, width: c.largura ?? Math.max(12, Math.min(48, c.rotulo.length + 4)) }))
     for (const l of aba.linhas) ws.addRow(Object.fromEntries(aba.colunas.map((c) => [c.chave, valorTipado(l[c.chave], c.tipo)])))
-    aba.colunas.forEach((c, i) => { const f = FMT[c.tipo]; if (f) ws.getColumn(i + 1).numFmt = f })
+    aba.colunas.forEach((c, i) => { const f = c.numFmt ?? FMT[c.tipo]; if (f) ws.getColumn(i + 1).numFmt = f })
     const cab = ws.getRow(1)
     cab.font = { bold: true, color: { argb: 'FFFFFFFF' } }
     cab.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A2E31' } }

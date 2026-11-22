@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
-import { dataBR } from '../../lib/formato'
+import { dataBR, osBR } from '../../lib/formato'
 import { situacaoPrazo } from '../../lib/dados'
 import { Cabecalho, Carregando, Icone, Selo, SeloPrazo, Vazio, useAvisar } from '../../components/ui'
 import Gantt from '../../components/Gantt'
@@ -49,7 +49,7 @@ export default function Sequencias() {
               <div key={t.id} className={`tarefa ${i === 0 ? 'proxima' : ''} ${situacaoPrazo(t.prazo, t.status) === 'ATRASADA' ? 'em-atraso' : ''}`}>
                 <div className="ordem">{i + 1}</div>
                 <div><strong>{t.codigo}</strong> · {t.principal} › {t.grupo}<div className="small">{t.descricao}</div>
-                  <div className="row small muted" style={{ gap: 8 }}>O.S. {t.os} · {t.cliente} · prazo {dataBR(t.prazo)} <SeloPrazo prazo={t.prazo} status={t.status} /> <Selo v={t.status} /></div></div>
+                  <div className="row small muted" style={{ gap: 8 }}>O.S. {osBR(t.os)} · {t.cliente} · prazo {dataBR(t.prazo)} <SeloPrazo prazo={t.prazo} status={t.status} /> <Selo v={t.status} /></div></div>
                 <div className="row" style={{ gap: 4 }}>
                   <button className="btn sec pequeno" disabled={i === 0} onClick={() => mover(i, -1)} aria-label="Subir"><Icone n="cima" /></button>
                   <button className="btn sec pequeno" disabled={i === lista.length - 1} onClick={() => mover(i, 1)} aria-label="Descer"><Icone n="baixo" /></button>

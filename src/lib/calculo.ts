@@ -52,13 +52,15 @@ export interface ResultadoApontamento {
 /**
  * Calcula um lançamento.
  * @param iniciosDoDia horários de início (HH:MM) de TODOS os lançamentos do mesmo recurso no mesmo dia (incluindo este)
+ * @param inicioDeclarado jornada informada pelo projetista com horário flexível naquele dia (ex.: '08:00').
+ *        Quando existe, prevalece sobre a regra automática do início antecipado.
  */
 export function calcularApontamento(a: EntradaApontamento, p: Parametros, feriados: Set<string>, inicioPadrao: string,
-                                    iniciosDoDia: string[], custoHH: number | null): ResultadoApontamento {
+                                    iniciosDoDia: string[], custoHH: number | null, inicioDeclarado?: string | null): ResultadoApontamento {
   const tipo = tipoDia(a.dia, feriados)
   const q = min(a.hora_inicio), r = min(a.hora_fim)
   const ant = min(p.inicio_antecipado)
-  const z = iniciosDoDia.some((h) => min(h) <= ant) ? ant : min(inicioPadrao)
+  const z = inicioDeclarado ? min(inicioDeclarado.slice(0, 5)) : iniciosDoDia.some((h) => min(h) <= ant) ? ant : min(inicioPadrao)
   const aa = z + (isoDow(a.dia) <= 4 ? p.jornada_seg_qui_min : p.jornada_sex_min)
   const ai = min(p.almoco_inicio), af = min(p.almoco_fim)
   const pos = (x: number) => Math.max(0, x)
@@ -123,21 +125,47 @@ function mediana(xs: number[]) {
 }
 const diasCorridos = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86400000 + 1
 
-export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], recursos: string[], p: Parametros, feriados: Set<string>) {
+/** 'TPE-002.1' → 'TPE-002': as revisões somam na TPE original. */
+export const tpeBase = (codigo: string) => codigo.replace(/\.\d+$/, '')
+
+export interface OpcoesIndicadores {
+  /**
+   * true (padrão do sistema): as horas das revisões (.1, .2…) somam na TPE original e as médias
+   * "por TPE" contam a tarefa uma vez só (2 h na .0 + 1 h na .1 = 1 TPE de 3 h).
+   * false: regra original da VER_035 (cada revisão é uma TPE), usada na reconciliação com a planilha.
+   */
+  agruparRevisoes?: boolean
+}
+
+export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], recursos: string[], p: Parametros, feriados: Set<string>,
+                            opcoes: OpcoesIndicadores = {}) {
+  const agrupar = opcoes.agruparRevisoes ?? true
+  const chave = (codigo: string) => (agrupar ? tpeBase(codigo) : codigo)
   const osMap = new Map(oss.map((o) => [o.os, o]))
   const porTpe = new Map<string, { h: number; he: number; custo: number }>()
   for (const a of aps) {
-    const x = porTpe.get(a.tpe_codigo) ?? { h: 0, he: 0, custo: 0 }
+    const k = chave(a.tpe_codigo)
+    const x = porTpe.get(k) ?? { h: 0, he: 0, custo: 0 }
     x.h += a.horas_totais; x.he += a.horas_extras; x.custo += a.custo_total ?? 0
-    porTpe.set(a.tpe_codigo, x)
+    porTpe.set(k, x)
   }
-  const hT = (t: LinhaTPE) => porTpe.get(t.codigo)?.h ?? 0
+  /** horas de cada tarefa distinta (TPE original + revisões, quando agrupado) dentro do conjunto */
+  const horasPorTarefa = (ts: LinhaTPE[]) => [...new Set(ts.map((t) => chave(t.codigo)))].map((k) => porTpe.get(k)?.h ?? 0)
+  const qtdTarefas = (ts: LinhaTPE[]) => new Set(ts.map((t) => chave(t.codigo))).size
+  // horas do próprio registro (sem somar revisões): usadas em totais, que não podem contar duas vezes
+  const hReg = new Map<string, number>(), heReg = new Map<string, number>()
+  for (const a of aps) {
+    hReg.set(a.tpe_codigo, (hReg.get(a.tpe_codigo) ?? 0) + a.horas_totais)
+    heReg.set(a.tpe_codigo, (heReg.get(a.tpe_codigo) ?? 0) + a.horas_extras)
+  }
+  const hR = (t: LinhaTPE) => hReg.get(t.codigo) ?? 0
+  const heR = (t: LinhaTPE) => heReg.get(t.codigo) ?? 0
   const dias = aps.map((a) => a.dia).sort()
   const ini = dias[0] ?? null, fim = dias[dias.length - 1] ?? null
   const horas = soma(aps.map((a) => a.horas_totais)), hn = soma(aps.map((a) => a.horas_normais)), he = soma(aps.map((a) => a.horas_extras))
   const reab = tpes.filter((t) => t.revisao !== 0).length
   const osAtendidas = new Set(tpes.map((t) => t.os))
-  const comHoras = tpes.filter((t) => hT(t) > 0)
+  const comHoras = horasPorTarefa(tpes).filter((h) => h > 0)
   const prazos = tpes.filter((t) => t.data_inicio && t.data_fim).map((t) => diasCorridos(t.data_inicio!, t.data_fim!))
   const ctot = soma(aps.map((a) => a.custo_total ?? 0))
 
@@ -145,7 +173,7 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
     inicio: ini, fim, tpes: tpes.length, finalizados: tpes.filter((t) => t.status === 'FINALIZADA').length,
     abertos: tpes.filter((t) => t.status !== 'FINALIZADA').length, reaberturas: reab, indice_reabertura: div(reab, tpes.length - reab),
     os_atendidas: osAtendidas.size, horas, horas_normais: hn, horas_extras: he, pct_he: div(he, horas),
-    tempo_medio_tpe: media(comHoras.map(hT)), tempo_medio_os: div(horas, osAtendidas.size), prazo_medio: media(prazos),
+    tempo_medio_tpe: media(comHoras), tempo_medio_os: div(horas, osAtendidas.size), prazo_medio: media(prazos),
     os_clientes: [...osAtendidas].filter((o) => o >= p.os_interna_limite).length,
     os_internas: [...osAtendidas].filter((o) => o < p.os_interna_limite).length,
   }
@@ -156,13 +184,13 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
     return m
   }
   const linhaDim = (k: string, ts: LinhaTPE[]) => {
-    const h = soma(ts.map(hT)), hx = soma(ts.map((t) => porTpe.get(t.codigo)?.he ?? 0))
+    const h = soma(ts.map(hR)), hx = soma(ts.map(heR)), ht = horasPorTarefa(ts)
     const qOS = new Set(ts.map((t) => t.os)).size, rb = ts.filter((t) => t.revisao !== 0).length
     return { chave: k, os_atendidas: qOS, qtd_tpes: ts.length, finalizados: ts.filter((t) => t.status === 'FINALIZADA').length,
-      horas: h, horas_extras: hx, tempo_medio_os: div(h, qOS), tempo_medio_tpe: media(ts.filter((t) => hT(t) > 0).map(hT)),
+      horas: h, horas_extras: hx, tempo_medio_os: div(h, qOS), tempo_medio_tpe: media(ht.filter((x) => x > 0)),
       reaberturas: rb, indice_reabertura: div(rb, ts.length - rb), pct_horas: div(h, horas),
       prazo_medio: media(ts.filter((t) => t.data_inicio && t.data_fim).map((t) => diasCorridos(t.data_inicio!, t.data_fim!))),
-      menor_tpe: Math.min(...ts.map(hT).filter((x) => x > 0), Infinity), maior_tpe: Math.max(0, ...ts.map(hT)) }
+      menor_tpe: Math.min(...ht.filter((x) => x > 0), Infinity), maior_tpe: Math.max(0, ...ht) }
   }
   const porPrincipal = [...agrupa((t) => t.principal)].map(([k, ts]) => linhaDim(k, ts))
   const porGrupo = [...agrupa((t) => `${t.principal} › ${t.grupo}`)].map(([k, ts]) => linhaDim(k, ts))
@@ -176,7 +204,7 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
     const cap = d0 && d1 ? capacidade(d0, d1, p, feriados) : 0
     const h = soma(as.map((a) => a.horas_totais)), x = soma(as.map((a) => a.horas_extras))
     const diasTrab = new Set(as.map((a) => a.dia)).size
-    const tpesAt = new Set(as.map((a) => a.tpe_codigo)).size
+    const tpesAt = new Set(as.map((a) => chave(a.tpe_codigo))).size
     return { recurso: nome, primeiro_dia: d0, ultimo_dia: d1, dias: diasTrab, capacidade: cap, horas_normais: h - x, horas_extras: x,
       horas: h, alocacao: div(h, cap), pct_he: div(x, h), media_dia: div(h, diasTrab), tpes_atendidos: tpesAt, horas_por_tpe: div(h, tpesAt),
       custo: soma(as.map((a) => a.custo_total ?? 0)) }
@@ -205,10 +233,10 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
   const porOS = [...agrupa((t) => t.os)].map(([os, ts]) => {
     const as = aps.filter((a) => a.os === os)
     const ds = as.map((a) => a.dia).sort()
-    const h = soma(ts.map(hT))
+    const h = soma(ts.map(hR))
     return { os, cliente: osMap.get(os)?.nome ?? '', nivel: osMap.get(os)?.nivel ?? '', vendedor: osMap.get(os)?.vendedor ?? '',
       classificacao: osMap.get(os)?.classificacao ?? '', qtd_tpes: ts.length, horas: h,
-      horas_extras: soma(ts.map((t) => porTpe.get(t.codigo)?.he ?? 0)), horas_por_tpe: div(h, ts.length),
+      horas_extras: soma(ts.map(heR)), horas_por_tpe: div(h, qtdTarefas(ts)),
       primeiro: ds[0] ?? null, ultimo: ds[ds.length - 1] ?? null, pct_horas: div(h, horas), custo: soma(as.map((a) => a.custo_total ?? 0)) }
   }).sort((a, b) => b.horas - a.horas)
 
@@ -235,7 +263,7 @@ export const DEFINICOES: Record<string, { nome: string; numerador: string; denom
   pct_he: { nome: '% em hora extra', numerador: 'Σ horas extras', denominador: 'Σ horas apontadas', unidade: '%', populacao: 'Idem', vazio: '0% se não houver horas', origem: 'KPI!B16' },
   indice_reabertura: { nome: 'Índice de reabertura', numerador: 'TPEs com revisão ≠ .0', denominador: 'TPEs originais (.0)', unidade: '%', populacao: 'Todas as TPEs', vazio: '0', origem: 'KPI!B11' },
   os_atendidas: { nome: 'O.S. atendidas', numerador: 'O.S. distintas com TPE (inclui internas < 1000)', denominador: '—', unidade: 'qtd', populacao: 'Todas as TPEs', vazio: '0', origem: 'KPI!B12' },
-  tempo_medio_tpe: { nome: 'Tempo médio por TPE', numerador: 'Σ horas das TPEs com horas > 0', denominador: 'nº dessas TPEs', unidade: 'h', populacao: 'TPEs com apontamento', vazio: '0', origem: 'KPI!B17' },
+  tempo_medio_tpe: { nome: 'Tempo médio por TPE', numerador: 'Σ horas das TPEs com horas > 0 (as revisões .1, .2… somam na TPE original)', denominador: 'nº de TPEs originais com horas (cada TPE conta uma vez, com as revisões)', unidade: 'h', populacao: 'TPEs com apontamento', vazio: '0', origem: 'KPI!B17, ajustado: revisões somadas à TPE original' },
   alocacao: { nome: 'Índice de alocação', numerador: 'horas apontadas do recurso', denominador: 'capacidade = dias úteis entre o 1º e o último apontamento × 9 h (seg–qui) / 8 h (sex)', unidade: '%', populacao: 'Por recurso', vazio: '0', origem: 'KPI!I72' },
   custo_total: { nome: 'Custo de engenharia', numerador: 'Σ horas normais × custo H/H + horas extras × custo H/H × (1 + adicional)', denominador: '—', unidade: 'R$', populacao: 'Apontamentos', vazio: '0', origem: 'KPI!B156' },
   consumo_estimativa: { nome: 'Horas consumidas ÷ estimadas', numerador: 'horas apontadas na TPE', denominador: 'horas estimadas (média do grupo)', unidade: '%', populacao: 'Por TPE', vazio: '—', origem: 'novo (não é % de conclusão física)' },

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useBase } from '../../lib/base'
 import { DEFINICOES, indicadores } from '../../lib/calculo'
 import { paraParametros } from '../../lib/dados'
-import { dataBR, h1, int, mesBR, pct, reais, reais0 } from '../../lib/formato'
+import { dataBR, h1, int, mesBR, osBR, pct, reais, reais0 } from '../../lib/formato'
 import { Cabecalho, Carregando } from '../../components/ui'
 
 export default function Indicadores() {
@@ -44,7 +44,7 @@ export default function Indicadores() {
       <div className="card"><h2>6. Tempo gasto por O.S.</h2>
         <p className="muted small">Média por O.S.: {h1(k.tempo_medio_por_os)} h · mediana: {h1(k.mediana_por_os)} h</p>
         <div className="rolagem" style={{ maxHeight: 460 }}><table className="tabela"><thead><tr><th>O.S.</th><th>Cliente</th><th>Nível</th><th>Vendedor</th><th className="num">TPEs</th><th className="num">Horas</th><th className="num">Extras</th><th>1º</th><th>Último</th><th className="num">% horas</th><th className="num">Custo</th></tr></thead>
-          <tbody>{k.porOS.map((o) => <tr key={o.os}><td>{o.os}</td><td>{o.cliente}</td><td>{o.nivel}</td><td>{o.vendedor}</td><td className="num">{o.qtd_tpes}</td><td className="num">{h1(o.horas)}</td><td className="num">{h1(o.horas_extras)}</td><td>{dataBR(o.primeiro)}</td><td>{dataBR(o.ultimo)}</td><td className="num">{pct(o.pct_horas)}</td><td className="num">{reais0(o.custo)}</td></tr>)}</tbody></table></div></div>
+          <tbody>{k.porOS.map((o) => <tr key={o.os}><td>{osBR(o.os)}</td><td>{o.cliente}</td><td>{o.nivel}</td><td>{o.vendedor}</td><td className="num">{o.qtd_tpes}</td><td className="num">{h1(o.horas)}</td><td className="num">{h1(o.horas_extras)}</td><td>{dataBR(o.primeiro)}</td><td>{dataBR(o.ultimo)}</td><td className="num">{pct(o.pct_horas)}</td><td className="num">{reais0(o.custo)}</td></tr>)}</tbody></table></div></div>
       <Dim titulo="7. Por vendedor" linhas={k.porVendedor} chave="Vendedor" />
       <Dim titulo="8. Por nível do cliente" linhas={k.porNivel} chave="Nível" />
       <Dim titulo="9. Por classificação do projeto" linhas={k.porClassificacao} chave="Classificação" />

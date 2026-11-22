@@ -30,7 +30,7 @@ const Auditoria = lazy(() => import('./pages/master/Auditoria'))
 /** Guarda de rota: só melhora a navegação. A proteção real está nas políticas RLS do banco. */
 function SoMaster({ children }: { children: ReactNode }) {
   const { perfil } = useAuth()
-  if (perfil?.papel !== 'master') return <Aviso tipo="erro">Acesso restrito ao administrador Master.</Aviso>
+  if (perfil?.papel !== 'master') return <Aviso tipo="erro">Acesso restrito ao Supervisor.</Aviso>
   return <BaseProvider>{children}</BaseProvider>
 }
 
@@ -38,8 +38,8 @@ function Rotas() {
   const { sessao, perfil, carregando } = useAuth()
   if (carregando) return <Carregando texto="Verificando acesso…" />
   if (!sessao) return <Routes><Route path="/definir-senha" element={<DefinirSenha />} /><Route path="*" element={<Login />} /></Routes>
-  if (!perfil) return <div style={{ padding: 24 }}><Aviso tipo="atencao">Seu login não tem perfil no sistema. Peça ao administrador Master para concluir seu cadastro.</Aviso></div>
-  if (!perfil.ativo) return <div style={{ padding: 24 }}><Aviso tipo="erro">Seu acesso está desativado. Fale com o administrador Master.</Aviso></div>
+  if (!perfil) return <div style={{ padding: 24 }}><Aviso tipo="atencao">Seu login não tem perfil no sistema. Peça ao Supervisor para concluir seu cadastro.</Aviso></div>
+  if (!perfil.ativo) return <div style={{ padding: 24 }}><Aviso tipo="erro">Seu acesso está desativado. Fale com o Supervisor.</Aviso></div>
   const inicial = perfil.papel === 'master' && !perfil.recurso_id ? <Navigate to="/master" replace /> : <Inicio />
   return (
     <Layout>

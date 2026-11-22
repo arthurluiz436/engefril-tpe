@@ -38,7 +38,7 @@ export default function Painel() {
   const r = k.resumo
   return (
     <div className="stack">
-      <Cabecalho titulo="Painel do Master" texto={`Período com apontamentos: ${dataBR(r.inicio)} a ${dataBR(r.fim)}. Indicadores com fórmula conferida contra a planilha VER_035.`}
+      <Cabecalho titulo="Painel do Supervisor" texto={`Período com apontamentos: ${dataBR(r.inicio)} a ${dataBR(r.fim)}.`}
         acoes={<><span className="small muted">Atualizado {atualizadoEm?.toLocaleTimeString('pt-BR')}</span><button className="btn sec" onClick={recarregar} disabled={carregando}>Atualizar</button></>} />
       <div className="grid4">
         <Kpi rotulo="TPEs cadastrados" valor={int(r.tpes)} sub={`${int(r.finalizados)} finalizados · ${int(r.abertos)} em aberto`} titulo="KPI!B7–B9 (validado)" />

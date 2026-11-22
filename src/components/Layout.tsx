@@ -58,7 +58,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </nav>
         <div className="rodape">
           <div style={{ color: '#fff', fontWeight: 600 }}>{perfil?.nome || perfil?.email}</div>
-          <div style={{ color: '#9aa3ad', marginBottom: 10 }}>{master ? 'Administrador Master' : 'Projetista'}{perfil?.recurso_nome ? ` · ${perfil.recurso_nome}` : ''}</div>
+          <div style={{ color: '#9aa3ad', marginBottom: 10 }}>{master ? 'Supervisor' : 'Projetista'}{perfil?.recurso_nome ? ` · ${perfil.recurso_nome}` : ''}</div>
           <button className="btn sec pequeno" onClick={sair}><Icone n="sair" /> Sair</button>
         </div>
       </aside>

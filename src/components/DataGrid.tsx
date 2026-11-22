@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Col } from '../lib/conjuntos'
-import { dataBR, h1, hhmm, int, pct, reais } from '../lib/formato'
+import { dataBR, h1, hhmm, int, osBR, pct, reais } from '../lib/formato'
 import { Icone } from './ui'
 
 export interface GridConfig {
@@ -23,7 +23,7 @@ export function formatar(v: unknown, c: Col): string {
     case 'hora': return hhmm(String(v))
     case 'horas': case 'numero': return h1(Number(v))
     case 'moeda': return reais(Number(v))
-    case 'inteiro': return String(v)
+    case 'inteiro': return c.numFmt === '000000' ? osBR(v as number) : String(v)
     case 'pct': return pct(Number(v))
     default: return String(v)
   }
