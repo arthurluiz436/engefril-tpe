@@ -45,14 +45,14 @@ export default function Painel() {
         acoes={<><span className="small muted">Atualizado {atualizadoEm?.toLocaleTimeString('pt-BR')}</span><button className="btn sec" onClick={recarregar} disabled={carregando}>Atualizar</button></>} />
       <SeletorPeriodo periodo={periodo} aoMudar={setPeriodo} base={base} />
       <div className="grid4">
-        <Kpi rotulo="TPEs cadastrados" valor={int(r.tpes)} sub={`${int(r.finalizados)} finalizados · ${int(r.abertos)} em aberto`} titulo="KPI!B7–B9 (validado)" />
-        <Kpi rotulo="O.S. atendidas" valor={int(r.os_atendidas)} sub={`${r.os_clientes} de clientes · ${r.os_internas} internas`} titulo="KPI!B12 (validado)" />
-        <Kpi rotulo="Índice de reabertura" valor={pct(r.indice_reabertura)} sub={`${r.reaberturas} revisões ÷ ${r.tpes - r.reaberturas} TPEs originais`} titulo="KPI!B11 (validado)" />
-        <Kpi rotulo="Horas apontadas" valor={h1(r.horas)} sub={`${pct(r.pct_he)} em hora extra`} titulo="KPI!B13/B16 (validado)" />
-        <Kpi rotulo="Custo de engenharia" valor={reais0(k.custos.total)} sub={`${pct(k.custos.pct_extra)} em H.E. · ${reais0(k.custos.por_hora)}/h`} titulo="KPI!B156 (validado)" />
-        <Kpi rotulo="Tempo médio por TPE" valor={hm(r.tempo_medio_tpe)} sub={`Prazo médio ${h1(r.prazo_medio)} dias corridos`} titulo="KPI!B17/B19 (validado)" />
+        <Kpi rotulo="TPEs cadastrados" valor={int(r.tpes)} sub={`${int(r.finalizados)} finalizados · ${int(r.abertos)} em aberto`} titulo="TPEs com data de início (ou cadastro) no período, ou com apontamento nele" />
+        <Kpi rotulo="O.S. atendidas" valor={int(r.os_atendidas)} sub={`${r.os_clientes} de clientes · ${r.os_internas} internas`} titulo="O.S. distintas das TPEs do período" />
+        <Kpi rotulo="Índice de reabertura" valor={pct(r.indice_reabertura)} sub={`${r.reaberturas} revisões ÷ ${r.tpes - r.reaberturas} TPEs originais`} titulo="Revisões (.1, .2…) ÷ TPEs originais (.0)" />
+        <Kpi rotulo="Horas apontadas" valor={h1(r.horas)} sub={`${pct(r.pct_he)} em hora extra`} titulo="Horas normais + extras apontadas no período" />
+        <Kpi rotulo="Custo de engenharia" valor={reais0(k.custos.total)} sub={`${pct(k.custos.pct_extra)} em H.E. · ${reais0(k.custos.por_hora)}/h`} titulo="Horas × custo H/H, com o adicional nas horas extras" />
+        <Kpi rotulo="Tempo médio por TPE" valor={hm(r.tempo_medio_tpe)} sub={`Prazo médio ${h1(r.prazo_medio)} dias corridos`} titulo="Horas por TPE (revisões somadas à original) e dias corridos do início à finalização" />
         <Kpi rotulo="Horas nos últimos 7 dias" valor={h1(pend.semana.reduce((s: number, a: any) => s + a.horas_totais, 0))} sub={`${pend.semana.length} apontamentos`} />
-        <Kpi rotulo="Custo médio por O.S." valor={reais0(k.custos.por_os)} sub="Inclui O.S. internas (regra da VER_035)" titulo="KPI!B165 (validado)" />
+        <Kpi rotulo="Custo médio por O.S." valor={reais0(k.custos.por_os)} sub="Inclui O.S. internas" titulo="Custo total ÷ O.S. atendidas" />
       </div>
       <div className="grid2">
         <div className="card">

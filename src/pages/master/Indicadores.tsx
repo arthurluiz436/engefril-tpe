@@ -22,7 +22,7 @@ export default function Indicadores() {
   )
   return (
     <div className="stack">
-      <Cabecalho titulo="Indicadores" texto={`Mesmos blocos da aba KPI da planilha VER_035. Período: ${textoPeriodo(periodo)}${r.inicio ? ` (apontamentos de ${dataBR(r.inicio)} a ${dataBR(r.fim)})` : " — sem apontamentos no período"}. Passe o mouse no nome para ver a definição.`}
+      <Cabecalho titulo="Indicadores" texto={`Produtividade, prazos e custos da engenharia. Período: ${textoPeriodo(periodo)}${r.inicio ? ` (apontamentos de ${dataBR(r.inicio)} a ${dataBR(r.fim)})` : " — sem apontamentos no período"}. Passe o mouse no nome para ver a definição.`}
         acoes={<button className="btn sec" onClick={() => window.print()}>Imprimir / PDF</button>} />
       <SeletorPeriodo periodo={periodo} aoMudar={setPeriodo} base={base} />
       <div className="card"><h2>1. Resumo geral</h2>

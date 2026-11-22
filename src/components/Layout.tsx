@@ -9,7 +9,7 @@ const MENU_PROJETISTA = [
   { to: '/minhas-tarefas', n: 'tarefas', t: 'Minhas tarefas' },
   { to: '/registrar', n: 'relogio', t: 'Registrar atividade' },
   { to: '/meus-apontamentos', n: 'lista', t: 'Meus apontamentos' },
-  { to: '/cronograma', n: 'grafico', t: 'Cronograma da equipe' },
+  { to: '/cronograma', n: 'gantt', t: 'Cronograma da equipe' },
   { to: '/calendario', n: 'calendario', t: 'Calendário' },
 ]
 const MENU_MASTER: { grupo: string; itens: { to: string; n: string; t: string }[] }[] = [
@@ -19,11 +19,11 @@ const MENU_MASTER: { grupo: string; itens: { to: string; n: string; t: string }[
     { to: '/master/dados', n: 'dados', t: 'Central de Dados' },
   ] },
   { grupo: 'Planejamento', itens: [
+    { to: '/master/os', n: 'clientes', t: 'Clientes e O.S.' },
     { to: '/master/tpes', n: 'tpe', t: 'TPEs e tarefas' },
     { to: '/master/sequencias', n: 'sequencia', t: 'Sequência por projetista' },
-    { to: '/master/cronograma', n: 'grafico', t: 'Cronograma da equipe' },
+    { to: '/master/cronograma', n: 'gantt', t: 'Cronograma da equipe' },
     { to: '/master/calendario', n: 'calendario', t: 'Calendário' },
-    { to: '/master/os', n: 'clientes', t: 'Clientes e O.S.' },
     { to: '/master/apontamentos', n: 'relogio', t: 'Apontamentos' },
   ] },
   { grupo: 'Entrada e saída', itens: [

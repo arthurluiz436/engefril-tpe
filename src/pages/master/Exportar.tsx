@@ -50,7 +50,7 @@ export default function Exportar() {
       ['Período', `${de || 'início'} a ${ate || 'hoje'} (campo ${CAMPO_DATA[conj]})`], ['Projetistas', projetistas.join(', ') || 'todos'],
       ['TPEs', tpes || 'todas'], ['Status', status.join(', ') || 'todos'], ['Ordenação', `${ordem.chave} ${ordem.dir === 1 ? 'crescente' : 'decrescente'}`],
       ['Linhas', String(resultado.length)], ['Gerado por', perfil?.email ?? ''], ['Gerado em', new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })],
-      ['Regras de cálculo', 'Horas normais/extras e custos conforme regra da VER_035 (ver docs/VALIDACAO.md).'],
+      ['Regras de cálculo', 'Horas normais/extras e custos conforme Administração › Parâmetros (jornada, feriados e dias atípicos, custos H/H).'],
     ]
     if (formato === 'csv') exportarCSV(nome, escolhidas, resultado)
     else {

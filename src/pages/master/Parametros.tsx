@@ -47,7 +47,7 @@ export default function Parametros() {
   return (
     <div className="stack">
       {elemento}
-      <Cabecalho titulo="Parâmetros" texto="Regras de cálculo herdadas da planilha VER_035. Custos e jornada são versionados por vigência: uma mudança vale a partir da data informada e preserva a interpretação dos lançamentos antigos." />
+      <Cabecalho titulo="Parâmetros" texto="Regras de cálculo de horas e custos. Custos e jornada são versionados por vigência: uma mudança vale a partir da data informada e preserva a interpretação dos lançamentos antigos." />
       <div className="row" role="tablist">{([['projetistas', 'Projetistas e custo H/H'], ['jornada', 'Jornada e hora extra'], ['feriados', 'Feriado / dias atípicos'], ['ferias', 'Férias'], ['catalogo', 'Catálogo de grupos'], ['listas', 'Listas']] as [Aba, string][]).map(([k, t]) =>
         <button key={k} role="tab" aria-selected={aba === k} className={`btn ${aba === k ? '' : 'sec'}`} onClick={() => setAba(k)}>{t}</button>)}</div>
 
@@ -77,7 +77,7 @@ export default function Parametros() {
               <td className="small">{custos.filter((c) => c.recurso_id === r.id).map((c) => `${reais(c.valor)} desde ${c.vigente_desde === '2000-01-01' ? 'o início' : dataBR(c.vigente_desde)}`).join(' · ')}</td>
               <td><input type="checkbox" style={{ width: 16, minHeight: 0 }} checked={r.ativo} onChange={(e) => exec(supabase.from('recursos').update({ ativo: e.target.checked }).eq('id', r.id), 'Situação atualizada.')} aria-label="Ativo" /></td>
               <td><button className="btn sec pequeno" onClick={() => novoCusto(r)}>Novo custo</button></td></tr>))}</tbody></table>
-          <p className="muted small">Início padrão: hora em que a jornada começa (07:00 para a maioria; 08:00 para quem trabalha 08–18). Se houver lançamento no dia começando até o “início antecipado”, a jornada começa nele — regra da VER_035.</p>
+          <p className="muted small">Início padrão: hora em que a jornada começa (07:00 para a maioria; 08:00 para quem trabalha 08–18). Se houver lançamento no dia começando até o “início antecipado”, a jornada começa nele.</p>
           <p className="muted small"><strong>Horário flexível:</strong> para quem em alguns dias trabalha 07–17 e em outros 08–18. Com a opção ativa, ao registrar atividade o projetista marca em que horário começou a jornada daquele dia, e a hora extra é calculada a partir dele (seg–qui: jornada de {String(atual?.jornada_seg_qui ?? '10:00').slice(0, 5)} h; sexta: {String(atual?.jornada_sex ?? '09:00').slice(0, 5)} h, com almoço).</p></div>
       )}
 
@@ -88,7 +88,7 @@ export default function Parametros() {
             ['Início antecipado', String(atual.inicio_antecipado).slice(0, 5)], ['Jornada seg–qui (com almoço)', atual.jornada_seg_qui], ['Jornada sexta (com almoço)', atual.jornada_sex],
             ['Almoço', `${String(atual.almoco_inicio).slice(0, 5)}–${String(atual.almoco_fim).slice(0, 5)}`], ['Adicional H.E. dia útil', `${Number(atual.adic_dia_util) * 100}%`],
             ['Adicional H.E. sábado', `${Number(atual.adic_sabado) * 100}%`], ['Adicional H.E. domingo/feriado', `${Number(atual.adic_dom_feriado) * 100}%`],
-            ['Descontar feriados da capacidade', atual.descontar_feriados_capacidade ? 'Sim' : 'Não (regra da VER_035)'], ['O.S. internas', `código menor que ${atual.os_interna_limite}`],
+            ['Descontar feriados da capacidade', atual.descontar_feriados_capacidade ? 'Sim' : 'Não'], ['O.S. internas', `código menor que ${atual.os_interna_limite}`],
           ] as [string, string][]).map(([a, b]) => <tr key={a}><td>{a}</td><td><strong>{b}</strong></td></tr>)}</tbody></table>
           {!np ? <button className="btn sec" onClick={() => setNp({ ...atual, vigente_desde: hojeISO(), id: undefined, criado_em: undefined })}>Criar nova vigência</button> : (
             <div className="stack">
