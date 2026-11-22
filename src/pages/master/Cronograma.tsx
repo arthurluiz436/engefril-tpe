@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useBase } from '../../lib/base'
+import { prazosDasOS } from '../../lib/dados'
 import { dataBR, diasEntre, h1, hojeISO, osBR, somaDias } from '../../lib/formato'
 import { corRecurso, ehDiaUtil } from '../../lib/agenda'
 import { Cabecalho, Carregando, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
@@ -107,7 +108,7 @@ export default function Cronograma() {
             <button key={r.id} type="button" className={`chip-proj ${ocultos.has(String(r.id)) ? 'off' : ''}`} style={{ borderColor: corRecurso(r, i) }} onClick={() => alternar(String(r.id))} aria-pressed={!ocultos.has(String(r.id))}>
               <span className="g2-ponto" style={{ background: corRecurso(r, i) }} />{r.nome}</button>))}
         </div>
-        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} somente={visiveis} diasAntes={diasAntes} pxDia={ZOOM[zoom].px}
+        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} somente={visiveis} diasAntes={diasAntes} pxDia={ZOOM[zoom].px} ausencias={base.ausencias} prazosOS={prazosDasOS(base.os)}
           mostrarConcluidas={concluidas} mostrarSetas={setas} mostrarCarga={carga} filtroOS={os ? Number(os) : null} rotulo={190}
           selecionada={sel?.id ?? null} aoSelecionar={(t) => setSel(sel?.id === t.id ? null : t)} />
       </div>

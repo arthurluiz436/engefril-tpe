@@ -5,7 +5,7 @@ import { supabase, mensagemErro } from '../../lib/supabase'
 import { situacaoPrazo } from '../../lib/dados'
 import { linhasDe } from '../../lib/conjuntos'
 import { dataBR, h1, hojeISO, osBR, pct } from '../../lib/formato'
-import { diasUteisEntre, fimPorDiasUteis, prazoMedioGrupo, proximoDiaUtil, proximoNumeroTpe } from '../../lib/agenda'
+import { diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoDiaUtil, proximoNumeroTpe } from '../../lib/agenda'
 import { Aviso, Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, SeloPrazo, Vazio, useAvisar, useConfirmar } from '../../components/ui'
 
 const STATUS = ['NÃO INICIADA', 'EM ANDAMENTO', 'PAUSADA', 'FINALIZADA']
@@ -61,13 +61,15 @@ export default function Tpes() {
   function proximoCodigo() {
     return `TPE-${String(proximoNumeroTpe((base?.tpes ?? []).map((t: any) => Number(t.numero)))).padStart(3, '0')}.0`
   }
-  const diasDe = (a?: string | null, b?: string | null) => (a && b && b >= a ? String(diasUteisEntre(String(a).slice(0, 10), String(b).slice(0, 10), base?.feriados)) : '')
+  // calendário do responsável: sem fins de semana, feriados e as férias dele
+  const cal = (resp?: any) => (base ? indisponiveis(base.feriados, base.ausencias, resp || null) : undefined)
+  const diasDe = (a?: string | null, b?: string | null, resp?: any) => (a && b && b >= a ? String(diasUteisEntre(String(a).slice(0, 10), String(b).slice(0, 10), cal(resp))) : '')
   function novo() {
     setEd({ novo: true, codigo: proximoCodigo(), os: '', principal: '', grupo: '', descricao: '', status: 'NÃO INICIADA', data_inicio: proximoDiaUtil(hojeISO(), base?.feriados),
       data_fim: '', prazo: '', dias: '', instrucoes: '', responsavel_id: '', predecessora_id: '' })
   }
   function editar(t: any) {
-    setEd({ ...t, data_inicio: t.data_inicio ?? '', data_fim: t.data_fim ?? '', prazo: t.prazo ?? '', dias: diasDe(t.data_inicio, t.prazo), instrucoes: t.instrucoes ?? '',
+    setEd({ ...t, data_inicio: t.data_inicio ?? '', data_fim: t.data_fim ?? '', prazo: t.prazo ?? '', dias: diasDe(t.data_inicio, t.prazo, t.responsavel_id), instrucoes: t.instrucoes ?? '',
       responsavel_id: t.responsavel_id ?? '', resp_original: t.responsavel_id ?? '', predecessora_id: t.predecessora_id ?? '', status_original: t.status })
   }
   function reabrir(t: any) {
@@ -76,9 +78,11 @@ export default function Tpes() {
       descricao: '', status: 'EM ANDAMENTO', data_inicio: hojeISO(), data_fim: '', prazo: '', dias: '', instrucoes: '', responsavel_id: t.responsavel_id ?? '', predecessora_id: '' })
   }
   // duração ↔ prazo (dias úteis, sem sábados, domingos e feriados)
-  const comDias = (e: any, dias: string) => ({ ...e, dias, prazo: e.data_inicio && Number(dias) > 0 ? fimPorDiasUteis(e.data_inicio, Number(dias), base?.feriados) : e.prazo })
-  const comInicio = (e: any, data_inicio: string) => (e.dias && data_inicio ? comDias({ ...e, data_inicio }, e.dias) : { ...e, data_inicio, dias: diasDe(data_inicio, e.prazo) })
-  const comPrazo = (e: any, prazo: string) => ({ ...e, prazo, dias: diasDe(e.data_inicio, prazo) })
+  const comDias = (e: any, dias: string) => ({ ...e, dias, prazo: e.data_inicio && Number(dias) > 0 ? fimPorDiasUteis(e.data_inicio, Number(dias), cal(e.responsavel_id)) : e.prazo })
+  const comInicio = (e: any, data_inicio: string) => (e.dias && data_inicio ? comDias({ ...e, data_inicio }, e.dias) : { ...e, data_inicio, dias: diasDe(data_inicio, e.prazo, e.responsavel_id) })
+  // trocar o responsável recalcula o prazo pelas férias da nova pessoa
+  const comResponsavel = (e: any, responsavel_id: string) => (e.dias && e.data_inicio ? comDias({ ...e, responsavel_id }, e.dias) : { ...e, responsavel_id })
+  const comPrazo = (e: any, prazo: string) => ({ ...e, prazo, dias: diasDe(e.data_inicio, prazo, e.responsavel_id) })
 
   const sugestao = ed && base && ed.principal && ed.grupo ? prazoMedioGrupo(base.tpes, ed.principal, ed.grupo, base.feriados) : null
   const porId = useMemo(() => new Map((base?.tpes ?? []).map((t: any) => [t.id, t])), [base])
@@ -218,8 +222,8 @@ export default function Tpes() {
             {ed.reabertura && <Aviso tipo="info">A revisão herda O.S., principal e grupo de {ed.reabertura}. Descreva o motivo/escopo da revisão.</Aviso>}
             <div className="grid2">
               <Campo rotulo="Código" ajuda={ed.novo ? 'Gerado automaticamente (usa o menor número livre); pode ser ajustado.' : 'Não editável.'}><input value={ed.codigo} readOnly={!ed.novo} onChange={(e) => setEd({ ...ed, codigo: e.target.value.toUpperCase() })} /></Campo>
-              <Campo rotulo="O.S." erro={erros.os}><select value={ed.os} onChange={(e) => setEd({ ...ed, os: e.target.value })}><option value="">Escolha…</option>
-                {base.os.filter((o: any) => !o.arquivada || o.os === ed.os).map((o: any) => <option key={o.os} value={o.os}>{osBR(o.os)} · {o.nome}{o.status === 'FINALIZADA' ? ' (finalizada)' : ''}</option>)}</select></Campo>
+              <Campo rotulo="O.S." erro={erros.os} ajuda="O.S. finalizadas não aparecem: reabra em Clientes e O.S."><select value={ed.os} onChange={(e) => setEd({ ...ed, os: e.target.value })}><option value="">Escolha…</option>
+                {base.os.filter((o: any) => (!o.arquivada && o.status !== 'FINALIZADA') || String(o.os) === String(ed.os)).map((o: any) => <option key={o.os} value={o.os}>{osBR(o.os)} · {o.nome}{o.status === 'FINALIZADA' ? ' (finalizada)' : ''}</option>)}</select></Campo>
               <Campo rotulo="Principal"><select value={ed.principal} onChange={(e) => setEd({ ...ed, principal: e.target.value, grupo: '' })}><option value="">Escolha…</option>{principais.map((p) => <option key={p}>{p}</option>)}</select></Campo>
               <Campo rotulo="Grupo" erro={erros.grupo}><select value={ed.grupo} onChange={(e) => setEd({ ...ed, grupo: e.target.value })} disabled={!ed.principal}><option value="">Escolha…</option>
                 {catalogo.filter((c) => c.principal === ed.principal && (c.ativo || c.grupo === ed.grupo)).map((c) => <option key={c.id}>{c.grupo}</option>)}</select></Campo>
@@ -227,7 +231,7 @@ export default function Tpes() {
             <Campo rotulo="Descrição" erro={erros.descricao}><textarea rows={2} maxLength={500} value={ed.descricao} onChange={(e) => setEd({ ...ed, descricao: e.target.value })} placeholder="Ex.: Elaboração do desenho do vaso SLCH1930 -35°C" /></Campo>
             <div className="grid2">
               <Campo rotulo="Responsável" ajuda="Entra no fim da fila do projetista; a ordem se ajusta em Sequência por projetista.">
-                <select value={ed.responsavel_id} onChange={(e) => setEd({ ...ed, responsavel_id: e.target.value })}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
+                <select value={ed.responsavel_id} onChange={(e) => setEd(comResponsavel(ed, e.target.value))}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
               <Campo rotulo="Predecessora" ajuda="Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.">
                 <select value={ed.predecessora_id} onChange={(e) => setEd({ ...ed, predecessora_id: e.target.value })}>
                   <option value="">Nenhuma</option>
@@ -251,7 +255,7 @@ export default function Tpes() {
               <div className="sugestao-prazo small">
                 <Icone n="grafico" t={16} />
                 <span>Prazo médio de <strong>{sugestao.n}</strong> TPE(s) finalizada(s) {sugestao.base === 'grupo' ? `de ${ed.principal} › ${ed.grupo}` : `de ${ed.principal} (sem histórico do grupo)`}: <strong>{sugestao.dias} {sugestao.dias === 1 ? 'dia útil' : 'dias úteis'}</strong>
-                  {ed.data_inicio && <> → prazo em <strong>{dataBR(fimPorDiasUteis(ed.data_inicio, sugestao.dias, base.feriados))}</strong></>}.</span>
+                  {ed.data_inicio && <> → prazo em <strong>{dataBR(fimPorDiasUteis(ed.data_inicio, sugestao.dias, cal(ed.responsavel_id)))}</strong></>}.</span>
                 {ed.data_inicio && String(sugestao.dias) !== String(ed.dias) && <button type="button" className="btn sec pequeno" onClick={() => setEd(comDias(ed, String(sugestao.dias)))}>Usar este prazo</button>}
               </div>)}
             {ed.principal && ed.grupo && !sugestao && <p className="muted small" style={{ margin: 0 }}>Ainda não há TPEs finalizadas deste grupo para sugerir um prazo médio.</p>}

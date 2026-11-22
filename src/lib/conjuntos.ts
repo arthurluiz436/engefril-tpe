@@ -1,6 +1,7 @@
 import type { ColunaExport } from './exportar'
 import { situacaoPrazo } from './dados'
 import { tpeBase } from './calculo'
+import { diasEntre } from './formato'
 
 export type Conjunto = 'apontamentos' | 'tpes' | 'os'
 export interface Col extends ColunaExport { padrao?: boolean }
@@ -73,6 +74,9 @@ export const COLUNAS: Record<Conjunto, Col[]> = {
     { chave: 'tipo', rotulo: 'Tipo', tipo: 'texto' },
     { chave: 'data_inicio', rotulo: 'Início', tipo: 'data' },
     { chave: 'prazo_final', rotulo: 'Prazo final', tipo: 'data', padrao: true },
+    { chave: 'data_finalizacao', rotulo: 'Data de finalização', tipo: 'data' },
+    { chave: 'parecer_prazo', rotulo: 'Parecer do prazo', tipo: 'texto' },
+    { chave: 'dias_prazo', rotulo: 'Dias além (+) ou antes (−) do prazo', tipo: 'inteiro' },
     { chave: 'status', rotulo: 'Status', tipo: 'texto', padrao: true },
     { chave: 'qtd_tpes', rotulo: 'TPEs', tipo: 'inteiro', padrao: true },
     { chave: 'tpes_abertas', rotulo: 'TPEs em aberto', tipo: 'inteiro', padrao: true },
@@ -132,7 +136,9 @@ export function linhasDe(conj: Conjunto, base: { aps: any[]; tpes: any[]; os: an
   const lim = Number(base.parametros?.os_interna_limite ?? 1000)
   return base.os.map((o) => {
     const ts = base.tpes.filter((t) => t.os === o.os)
-    return { ...o, tipo: o.os < lim ? 'INTERNA' : 'CLIENTE', qtd_tpes: ts.length, tpes_abertas: ts.filter((t) => t.status !== 'FINALIZADA').length,
+    const dp = o.status === 'FINALIZADA' && o.data_finalizacao && o.prazo_final ? diasEntre(String(o.prazo_final).slice(0, 10), String(o.data_finalizacao).slice(0, 10)) : null
+    const parecer_prazo = dp == null ? '' : dp === 0 ? 'FINALIZADA NO PRAZO' : dp < 0 ? 'FINALIZADA ANTES DO PRAZO' : 'FINALIZADA ATRASADA'
+    return { ...o, parecer_prazo, dias_prazo: dp, tipo: o.os < lim ? 'INTERNA' : 'CLIENTE', qtd_tpes: ts.length, tpes_abertas: ts.filter((t) => t.status !== 'FINALIZADA').length,
       horas: ts.reduce((s, t) => s + t.horas_totais, 0), custo: ts.reduce((s, t) => s + (t.custo_total ?? 0), 0), arquivada: o.arquivada ? 'SIM' : '' }
   })
 }

@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { dataBR, diasEntre, hojeISO, somaDias } from '../lib/formato'
-import { clarear, corRecurso, ehDiaUtil } from '../lib/agenda'
+import { dataBR, diasEntre, hojeISO, osBR, somaDias } from '../lib/formato'
+import { clarear, corRecurso, diasDeAusencia, ehDiaUtil, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 
 /**
  * Cronograma (Gantt) da equipe, uma faixa por projetista (swimlane) na cor dele.
@@ -34,9 +34,14 @@ export interface GanttProps {
   aoSelecionar?: (t: any) => void
   /** Largura da coluna de nomes. */
   rotulo?: number
+  /** férias/ausências: sombreadas na faixa do projetista e fora da carga */
+  ausencias?: Ausencia[]
+  /** prazo final de cada O.S. (Supervisor); no projetista vem em t.os_prazo_final */
+  prazosOS?: Map<number, string>
 }
 
 const H_PISTA = 32, H_LINHA = 28, H_CARGA = 18, H_EIXO = 34
+const SEM_AUSENCIAS: Ausencia[] = []
 const iso = (d?: string | null) => (d ? String(d).slice(0, 10) : null)
 const maior = (a: string, b?: string | null) => (b && b > a ? b : a)
 const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`
@@ -47,11 +52,11 @@ type Linha =
   | { tipo: 'pista'; y: number; h: number; pista: Pista }
   | { tipo: 'tarefa'; y: number; h: number; pista: Pista; t: any; rot: string; feita: boolean; zebra: boolean }
   | { tipo: 'carga'; y: number; h: number; pista: Pista }
-interface Pista { id: string; nome: string; cor: string; abertas: any[]; concluidas: any[]; carga: Map<string, any[]> }
+interface Pista { id: string; nome: string; cor: string; abertas: any[]; concluidas: any[]; carga: Map<string, any[]>; ausente: Set<string> }
 
 export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
-    mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar } = p
+    mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS } = p
   const ROT = p.rotulo ?? 172
   const somente = p.somente == null ? null : new Set(Array.isArray(p.somente) ? p.somente : [p.somente])
   const hoje = hojeISO()
@@ -80,16 +85,17 @@ export default function Gantt(p: GanttProps) {
           .filter((t: any) => String(t.responsavel_id) === id && t.status === 'FINALIZADA' && iso(t.data_fim) && iso(t.data_fim)! >= ini)
           .sort((a, b) => String(a.data_fim).localeCompare(String(b.data_fim)))
         // carga: tarefas em aberto cujo planejado cobre cada dia útil
+        const ausente = diasDeAusencia(ausencias, id)
         const carga = new Map<string, any[]>()
         for (const t of abertas) {
           const a = iso(t.data_inicio), b = iso(t.prazo)
           if (!a || !b || b < a) continue
           for (let x = a < ini ? ini : a, k = 0; x <= b && k < 400; x = somaDias(x, 1), k++) {
-            if (!ehDiaUtil(x, feriados)) continue
+            if (!ehDiaUtil(x, feriados) || ausente.has(x)) continue
             carga.set(x, [...(carga.get(x) ?? []), t])
           }
         }
-        return { id, nome: r.nome as string, cor, abertas, concluidas, carga }
+        return { id, nome: r.nome as string, cor, abertas, concluidas, carga, ausente }
       })
       .filter((pi) => pi.abertas.length || pi.concluidas.length || pi.id === destaque)
     let fim = hoje
@@ -110,10 +116,19 @@ export default function Gantt(p: GanttProps) {
       })
       if (mostrarCarga && pi.abertas.length) { linhas.push({ tipo: 'carga', y, h: H_CARGA, pista: pi }); y += H_CARGA }
     }
-    return { ini, fim, dias, pistas, linhas, altura: y, linhaDe, donoDe, porId }
-  }, [tpes, recursos, feriados, ordem, datas, destaque, somente && [...somente].join(','), diasAntes, mostrarConcluidas, mostrarCarga, filtroOS, hoje]) // eslint-disable-line react-hooks/exhaustive-deps
+    // faixa vertical de cada projetista (para sombrear as férias)
+    const faixa = new Map<string, { y0: number; y1: number }>()
+    for (const l of linhas) { const f = faixa.get(l.pista.id); faixa.set(l.pista.id, { y0: f ? f.y0 : l.y, y1: l.y + l.h }) }
+    // prazos finais das O.S. das tarefas em aberto mostradas
+    const prazos = new Map<string, Set<number>>()
+    for (const pi of pistas) for (const t of pi.abertas) {
+      const pz = iso(t.os_prazo_final ?? prazosOS?.get(t.os))
+      if (pz && pz >= ini && pz <= fim) prazos.set(pz, new Set([...(prazos.get(pz) ?? []), t.os]))
+    }
+    return { ini, fim, dias, pistas, linhas, altura: y, linhaDe, donoDe, porId, faixa, prazos }
+  }, [tpes, recursos, feriados, ordem, datas, destaque, somente && [...somente].join(','), diasAntes, mostrarConcluidas, mostrarCarga, filtroOS, hoje, ausencias, prazosOS]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { ini, fim, dias, pistas, linhas, altura, linhaDe, donoDe, porId } = d
+  const { ini, fim, dias, pistas, linhas, altura, linhaDe, donoDe, porId, faixa, prazos } = d
   const temPistas = pistas.length > 0
   useLayoutEffect(() => {
     const el = trilhaRef.current
@@ -224,6 +239,8 @@ export default function Gantt(p: GanttProps) {
         <span><i className="lg atraso" /> Após o prazo</span>
         <span><i className="lg sobrecarga" /> 2+ tarefas no mesmo dia</span>
         {mostrarSetas && <span><i className="lg seta" /> Predecessora <i className="lg seta-outro" /> passa para outro projetista</span>}
+        {prazos.size > 0 && <span><i className="lg prazo-os" /> Prazo final da O.S.</span>}
+        {ausencias.length > 0 && <span><i className="lg ferias" /> Férias</span>}
         <span><i className="lg hoje" /> Hoje</span>
       </div>
       <div className={`g2-rolagem ${pxDia === 'ajustar' ? '' : 'rola'}`}>
@@ -233,6 +250,10 @@ export default function Gantt(p: GanttProps) {
             {eixo.meses.map((m) => <span key={m.d} className="g2-mes" style={{ left: X(m.d) + 3 }}>{m.rot}</span>)}
             {eixo.marcas.map((m) => <span key={m.d} className={`g2-dia ${m.fds ? 'fds' : ''}`} style={{ left: X(m.d) + dx / 2 }}>{m.rot}</span>)}
             {dx >= 18 && eixo.marcas.map((m) => <span key={`s${m.d}`} className="g2-sem" style={{ left: X(m.d) + dx / 2 }}>{SEM[new Date(`${m.d}T12:00:00Z`).getUTCDay()]}</span>)}
+            {[...prazos.entries()].map(([d, oss]) => (
+              <span key={`os${d}`} className="g2-os-rot" style={{ left: X(somaDias(d, 1)) }}
+                title={`Prazo final da${oss.size > 1 ? 's' : ''} O.S. ${[...oss].map(osBR).join(', ')}: ${dataBR(d)}`}>
+                OS {[...oss].map((o) => osBR(o)).join(' · ')}</span>))}
             {hoje >= ini && hoje <= fim && <span className="g2-hoje-rot" style={{ left: xHoje }}>Hoje</span>}
           </div>
           <div className="g2-rotulos" style={{ height: altura }}>
@@ -270,6 +291,7 @@ export default function Gantt(p: GanttProps) {
             <svg width={W} height={altura} role="img" aria-label="Cronograma das tarefas por projetista">
               <defs>
                 <pattern id="g2-hachura" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="var(--vermelho)" /><rect x="3" width="3" height="6" fill="#e9877e" /></pattern>
+                <pattern id="g2-ferias" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="10" fill="rgba(213,149,8,.07)" /><rect width="4" height="10" fill="rgba(213,149,8,.18)" /></pattern>
                 <pattern id="g2-hachura-leve" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="8" fill="rgba(180,35,24,.16)" /></pattern>
                 {cores.map((c) => <marker key={c} id={idCor(c)} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill={c} /></marker>)}
               </defs>
@@ -302,6 +324,19 @@ export default function Gantt(p: GanttProps) {
                       {dx >= 14 && <text x={X(x) + dx / 2} y={l.y + l.h / 2 + 4} textAnchor="middle" className="g2-carga-n" fill={v.length > 1 ? '#fff' : 'var(--grafite-900)'}>{v.length}</text>}
                     </g>))}
                 </Fragment>))}
+              {/* férias / ausências na faixa do projetista */}
+              {pistas.map((pi) => ausencias.filter((a) => String(a.recurso_id) === pi.id).map((a, k) => {
+                const r = recorta(String(a.inicio).slice(0, 10), String(a.fim).slice(0, 10)); const fx = faixa.get(pi.id)
+                if (!r || !fx) return null
+                return (
+                  <g key={`f${pi.id}-${k}`}>
+                    <rect x={r.x} y={fx.y0} width={r.w} height={fx.y1 - fx.y0} fill="url(#g2-ferias)" />
+                    <title>{`${ROTULO_AUSENCIA[a.tipo ?? 'FERIAS'] ?? 'Férias'} de ${pi.nome}: ${dataBR(a.inicio)} a ${dataBR(a.fim)}${a.observacao ? ` (${a.observacao})` : ''}. Esses dias não contam na duração das tarefas.`}</title>
+                    {r.w > 46 && <text x={r.x + r.w / 2} y={fx.y0 + 20} textAnchor="middle" className="g2-ferias-rot">{ROTULO_AUSENCIA[a.tipo ?? 'FERIAS'] ?? 'Férias'}</text>}
+                  </g>)
+              }))}
+              {/* prazo final das O.S. (linha discreta) */}
+              {[...prazos.keys()].map((d) => <line key={`os${d}`} x1={X(somaDias(d, 1))} x2={X(somaDias(d, 1))} y1={0} y2={altura} stroke="#8a9099" strokeWidth={1} strokeDasharray="3 3" opacity={0.8} />)}
               {linhas.map((l) => l.tipo === 'tarefa' ? conteudoTarefa(l) : null)}
               {setas.map((s, i) => (
                 <path key={i} d={s.path} fill="none" stroke={s.cor} strokeWidth={s.cruza ? 1.8 : 1.4} strokeDasharray={s.cruza ? '5 3' : undefined}

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { useBase } from '../../lib/base'
 import { dataBR, hojeISO, reais } from '../../lib/formato'
+import { diasUteisEntre, ROTULO_AUSENCIA } from '../../lib/agenda'
 import { Aviso, Cabecalho, Campo, Icone, useAvisar, useConfirmar } from '../../components/ui'
 
-type Aba = 'projetistas' | 'jornada' | 'feriados' | 'catalogo' | 'listas'
+type Aba = 'projetistas' | 'jornada' | 'feriados' | 'ferias' | 'catalogo' | 'listas'
 
 export default function Parametros() {
-  const { recarregar } = useBase()
+  const { base, recarregar } = useBase()
   const avisar = useAvisar()
   const { confirmar, elemento } = useConfirmar()
   const [aba, setAba] = useState<Aba>('projetistas')
@@ -47,7 +48,7 @@ export default function Parametros() {
     <div className="stack">
       {elemento}
       <Cabecalho titulo="Parâmetros" texto="Regras de cálculo herdadas da planilha VER_035. Custos e jornada são versionados por vigência: uma mudança vale a partir da data informada e preserva a interpretação dos lançamentos antigos." />
-      <div className="row" role="tablist">{([['projetistas', 'Projetistas e custo H/H'], ['jornada', 'Jornada e hora extra'], ['feriados', 'Feriado / dias atípicos'], ['catalogo', 'Catálogo de grupos'], ['listas', 'Listas']] as [Aba, string][]).map(([k, t]) =>
+      <div className="row" role="tablist">{([['projetistas', 'Projetistas e custo H/H'], ['jornada', 'Jornada e hora extra'], ['feriados', 'Feriado / dias atípicos'], ['ferias', 'Férias'], ['catalogo', 'Catálogo de grupos'], ['listas', 'Listas']] as [Aba, string][]).map(([k, t]) =>
         <button key={k} role="tab" aria-selected={aba === k} className={`btn ${aba === k ? '' : 'sec'}`} onClick={() => setAba(k)}>{t}</button>)}</div>
 
       {aba === 'projetistas' && (
@@ -110,6 +111,7 @@ export default function Parametros() {
       )}
 
       {aba === 'feriados' && <DiasAtipicos feriados={feriados} atual={atual} exec={exec} confirmar={confirmar} />}
+      {aba === 'ferias' && <Ferias recursos={recursos} base={base} exec={exec} confirmar={confirmar} />}
 
       {aba === 'catalogo' && (
         <div className="grid2">
@@ -207,6 +209,78 @@ function DiasAtipicos({ feriados, atual, exec, confirmar }: {
                 <td><span className={`badge ${tipo.cor}`}>{tipo.rot}</span></td><td>{f.descricao}</td><td className="small">{regra(f)}</td>
                 <td><button className="btn fantasma pequeno" aria-label={`Remover ${dataBR(f.data)}`} onClick={async () => { if (await confirmar('Remover dia', `Remover ${dataBR(f.data)}? Os lançamentos desse dia voltam a ser calculados como dia comum.`, 'Remover', true)) exec(supabase.from('feriados').delete().eq('data', f.data), 'Removido.') }}><Icone n="lixo" /></button></td></tr>) })}</tbody></table>)}
         <p className="muted small">Inclua também os feriados municipais. Feriado e dia útil não trabalhado ficam fora da capacidade e da contagem de dias úteis dos prazos.</p>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- Férias e ausências
+function Ferias({ recursos, base, exec, confirmar }: {
+  recursos: any[]; base: any; exec: (p: PromiseLike<{ error: any }>, ok: string) => Promise<void>
+  confirmar: (titulo: string, texto: any, ok?: string, perigo?: boolean) => Promise<boolean>
+}) {
+  const [lista, setLista] = useState<any[] | null>(null)
+  const [semTabela, setSemTabela] = useState(false)
+  const [nf, setNf] = useState({ recurso_id: '', tipo: 'FERIAS', inicio: '', fim: '', observacao: '' })
+  const carregar = () => supabase.from('ausencias').select('*').order('inicio', { ascending: false }).then(({ data, error }) => { setSemTabela(!!error); setLista(data ?? []) })
+  useEffect(() => { carregar() }, [])
+  const gravar = async (p: PromiseLike<{ error: any }>, ok: string) => { await exec(p, ok); carregar() }
+  const feriados: Set<string> = base?.feriados ?? new Set()
+  const nome = (id: any) => recursos.find((r) => String(r.id) === String(id))?.nome ?? '—'
+  const erro = !nf.recurso_id ? 'Escolha o projetista.' : !nf.inicio || !nf.fim ? 'Informe início e fim.' : nf.fim < nf.inicio ? 'O fim é antes do início.' : null
+  const uteis = nf.inicio && nf.fim && nf.fim >= nf.inicio ? diasUteisEntre(nf.inicio, nf.fim, feriados) : 0
+  // TPEs em aberto da pessoa planejadas dentro do período (vão precisar ser reprogramadas)
+  const afetadas = (rec: any, ini: string, fim: string) => (base?.tpes ?? []).filter((t: any) => String(t.responsavel_id) === String(rec) && t.status !== 'FINALIZADA' && !t.arquivada
+    && t.data_inicio && t.prazo && String(t.data_inicio).slice(0, 10) <= fim && String(t.prazo).slice(0, 10) >= ini)
+  const afetadasNovo = erro ? [] : afetadas(nf.recurso_id, nf.inicio, nf.fim)
+  async function incluir() {
+    if (erro) return
+    const sobrepoe = (lista ?? []).find((a) => String(a.recurso_id) === nf.recurso_id && a.inicio <= nf.fim && a.fim >= nf.inicio)
+    if (sobrepoe && !(await confirmar('Período sobreposto', `${nome(nf.recurso_id)} já tem ${ROTULO_AUSENCIA[sobrepoe.tipo] ?? 'ausência'} de ${dataBR(sobrepoe.inicio)} a ${dataBR(sobrepoe.fim)}. Incluir mesmo assim?`))) return
+    await gravar(supabase.from('ausencias').insert({ recurso_id: Number(nf.recurso_id), tipo: nf.tipo, inicio: nf.inicio, fim: nf.fim, observacao: nf.observacao.trim() || null }),
+      `${ROTULO_AUSENCIA[nf.tipo]} de ${nome(nf.recurso_id)} incluída.`)
+    setNf({ ...nf, inicio: '', fim: '', observacao: '' })
+  }
+  const hoje = hojeISO()
+  const proximas = (lista ?? []).filter((a) => a.fim >= hoje).sort((a, b) => a.inicio.localeCompare(b.inicio))
+  const passadas = (lista ?? []).filter((a) => a.fim < hoje)
+  const linha = (a: any) => {
+    const af = afetadas(a.recurso_id, a.inicio, a.fim)
+    return (
+      <tr key={a.id}>
+        <td><strong>{nome(a.recurso_id)}</strong></td>
+        <td><span className="badge dourado">{ROTULO_AUSENCIA[a.tipo] ?? a.tipo}</span></td>
+        <td className="sem-quebra">{dataBR(a.inicio)} a {dataBR(a.fim)}</td>
+        <td className="num">{diasUteisEntre(a.inicio, a.fim, feriados)}</td>
+        <td className="small">{a.observacao}{af.length > 0 && a.fim >= hoje && <div className="texto-atraso">TPEs planejadas no período: {af.map((t: any) => t.codigo).join(', ')}</div>}</td>
+        <td><button className="btn fantasma pequeno" aria-label="Remover" onClick={async () => { if (await confirmar('Remover período', `Remover ${ROTULO_AUSENCIA[a.tipo] ?? 'ausência'} de ${nome(a.recurso_id)} (${dataBR(a.inicio)} a ${dataBR(a.fim)})?`, 'Remover', true)) gravar(supabase.from('ausencias').delete().eq('id', a.id), 'Removido.') }}><Icone n="lixo" /></button></td>
+      </tr>)
+  }
+  if (semTabela) return <Aviso tipo="atencao">Para cadastrar férias, aplique a migração <code>20261122000009_os_ferias.sql</code> no Supabase.</Aviso>
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <div><h2 style={{ margin: 0 }}>Incluir férias ou ausência</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>Os dias do período ficam indisponíveis para a pessoa: não contam na duração das TPEs (o prazo é empurrado), aparecem sombreados no cronograma e são pulados na reprogramação da sequência.</p></div>
+        <div className="grid4">
+          <Campo rotulo="Projetista"><select value={nf.recurso_id} onChange={(e) => setNf({ ...nf, recurso_id: e.target.value })}><option value="">Escolha…</option>{recursos.filter((r) => r.ativo).map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
+          <Campo rotulo="Tipo"><select value={nf.tipo} onChange={(e) => setNf({ ...nf, tipo: e.target.value })}>{Object.entries(ROTULO_AUSENCIA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Campo>
+          <Campo rotulo="Início"><input type="date" value={nf.inicio} onChange={(e) => setNf({ ...nf, inicio: e.target.value, fim: nf.fim && nf.fim >= e.target.value ? nf.fim : e.target.value })} /></Campo>
+          <Campo rotulo="Fim (último dia fora)"><input type="date" value={nf.fim} min={nf.inicio || undefined} onChange={(e) => setNf({ ...nf, fim: e.target.value })} /></Campo>
+        </div>
+        <Campo rotulo="Observação (opcional)"><input value={nf.observacao} maxLength={200} placeholder="Ex.: férias coletivas de fim de ano" onChange={(e) => setNf({ ...nf, observacao: e.target.value })} /></Campo>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <span className="small muted">{uteis > 0 ? `${uteis} dia(s) útil(eis) fora no período.` : ''}</span>
+          <button className="btn" disabled={!!erro} onClick={incluir} title={erro ?? ''}><Icone n="mais" /> Incluir</button>
+        </div>
+        {afetadasNovo.length > 0 && <Aviso tipo="atencao">{nome(nf.recurso_id)} tem TPE(s) planejada(s) nesse período ({afetadasNovo.map((t: any) => t.codigo).join(', ')}). Depois de incluir as férias, abra <strong>Sequência por projetista</strong> e mude a ordem (ou use subir/descer) para reprogramar as datas pulando as férias.</Aviso>}
+      </div>
+      <div className="card">
+        <h2>Próximas e em andamento</h2>
+        {!lista ? <p className="muted small">Carregando…</p> : proximas.length === 0 ? <p className="muted small">Nenhuma férias ou ausência programada.</p> : (
+          <table className="tabela"><thead><tr><th>Projetista</th><th>Tipo</th><th>Período</th><th className="num">Dias úteis</th><th>Observação</th><th></th></tr></thead><tbody>{proximas.map(linha)}</tbody></table>)}
+        {passadas.length > 0 && <details style={{ marginTop: 12 }}><summary className="small muted" style={{ cursor: 'pointer' }}>Anteriores ({passadas.length})</summary>
+          <table className="tabela"><tbody>{passadas.map(linha)}</tbody></table></details>}
       </div>
     </div>
   )

@@ -19,7 +19,7 @@ export function CalendarioSupervisor() {
   return (
     <div className="stack">
       <Cabecalho titulo="Calendário" texto="Apontamentos da equipe em cada dia, na cor de cada projetista. Passe o mouse sobre um item para ver a TPE e o que foi feito; clique nos nomes para mostrar ou ocultar projetistas." />
-      <Calendario entradas={entradas} tpes={base.tpes} recursos={base.recursos} dias={base.feriadosLista ?? []} mes={mes} aoMudarMes={setMes} />
+      <Calendario entradas={entradas} tpes={base.tpes} recursos={base.recursos} dias={base.feriadosLista ?? []} mes={mes} aoMudarMes={setMes} ausencias={base.ausencias} />
     </div>
   )
 }
@@ -44,7 +44,7 @@ export function CalendarioProjetista() {
       <Cabecalho titulo="Calendário da equipe" texto="O que cada projetista apontou em cada dia, na cor de cada um. Passe o mouse sobre um item para ver os detalhes da TPE." />
       {erro && <Aviso tipo="atencao">{erro}</Aviso>}
       {!equipe && !erro ? <Carregando /> : equipe && (
-        <Calendario entradas={entradas} tpes={equipe.tpes} recursos={equipe.recursos.filter((r: any) => r.ativo !== false)} dias={equipe.dias} mes={mes} aoMudarMes={setMes} carregando={carregando} />)}
+        <Calendario entradas={entradas} tpes={equipe.tpes} recursos={equipe.recursos.filter((r: any) => r.ativo !== false)} dias={equipe.dias} mes={mes} aoMudarMes={setMes} carregando={carregando} ausencias={equipe.ausencias} />)}
     </div>
   )
 }

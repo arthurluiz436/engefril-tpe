@@ -45,7 +45,7 @@ export default function CronogramaProjetista() {
               aria-pressed={!ocultos.has(String(r.id))} onClick={() => alternar(String(r.id))}>
               <span className="g2-ponto" style={{ background: corRecurso(r, i) }} />{r.nome}{String(r.id) === String(perfil?.recurso_id) ? ' (você)' : ''}</button>))}
         </div>
-        <Gantt tpes={equipe.tpes} recursos={recursos} feriados={equipe.feriados} somente={visiveis} diasAntes={diasAntes} pxDia={ZOOM[zoom].px}
+        <Gantt tpes={equipe.tpes} recursos={recursos} feriados={equipe.feriados} somente={visiveis} diasAntes={diasAntes} pxDia={ZOOM[zoom].px} ausencias={equipe.ausencias}
           destaque={perfil?.recurso_id ? String(perfil.recurso_id) : undefined} rotulo={180} />
       </div>
     </div>

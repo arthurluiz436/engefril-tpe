@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { dataBR, hm, hojeISO, somaDias } from '../lib/formato'
-import { corRecurso } from '../lib/agenda'
+import { corRecurso, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 import { Dialogo, Icone } from './ui'
 
 /**
@@ -20,6 +20,8 @@ interface Props {
   mes: string // 'AAAA-MM'
   aoMudarMes: (mes: string) => void
   carregando?: boolean
+  /** férias e ausências da equipe */
+  ausencias?: Ausencia[]
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -39,7 +41,7 @@ export function gradeDoMes(mes: string): [string, string] {
 const moverMes = (mes: string, n: number) => { const [a, m] = mes.split('-').map(Number); return new Date(Date.UTC(a, m - 1 + n, 1)).toISOString().slice(0, 7) }
 const hora = (h: string) => { const [a, b] = h.slice(0, 5).split(':'); return b === '00' ? `${Number(a)}h` : `${Number(a)}h${b}` }
 
-export default function Calendario({ entradas, tpes, recursos, dias = [], mes, aoMudarMes, carregando }: Props) {
+export default function Calendario({ entradas, tpes, recursos, dias = [], mes, aoMudarMes, carregando, ausencias = [] }: Props) {
   const hoje = hojeISO()
   const [ocultos, setOcultos] = useState<Set<string>>(new Set())
   const [aberto, setAberto] = useState<string | null>(null)
@@ -123,6 +125,8 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
                 {total > 0 && <span className="cal-total" title="Horas apontadas no dia (projetistas visíveis)">{hm(total)}</span>}
               </div>
               {esp && <div className={`cal-esp ${esp.tipo ?? 'FERIADO'}`} title={esp.descricao}>{ROT_DIA[esp.tipo ?? 'FERIADO']}: {esp.descricao}</div>}
+              {ausencias.filter((a) => !ocultos.has(String(a.recurso_id)) && String(a.inicio).slice(0, 10) <= d && String(a.fim).slice(0, 10) >= d && w !== 0 && w !== 6).map((a, k) => (
+                <div key={`a${k}`} className="cal-ferias" style={{ borderLeftColor: cor.get(String(a.recurso_id)) }} title={`${ROTULO_AUSENCIA[a.tipo ?? "FERIAS"] ?? "Férias"} de ${nome.get(String(a.recurso_id)) ?? ""}: ${dataBR(a.inicio)} a ${dataBR(a.fim)}`}>{ROTULO_AUSENCIA[a.tipo ?? "FERIAS"] ?? "Férias"} · {(nome.get(String(a.recurso_id)) ?? "").split(" ")[0]}</div>))}
               {lista.slice(0, lista.length > MAX_NO_DIA ? MAX_NO_DIA - 1 : MAX_NO_DIA).map(item)}
               {lista.length > MAX_NO_DIA && <button type="button" className="cal-mais" onClick={() => setAberto(d)}>Mais {lista.length - (MAX_NO_DIA - 1)}</button>}
             </div>)

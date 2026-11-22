@@ -1,3 +1,4 @@
+import type { Ausencia } from './agenda'
 import type { DiaEspecial } from './calculo'
 import { supabase, buscarTudo } from './supabase'
 import { hojeISO, somaDias } from './formato'
@@ -27,20 +28,22 @@ export function situacaoPrazo(prazo: string | null, status: string, diasAlerta =
 }
 
 export async function carregarBaseMaster() {
-  const [aps, tpes, os, recursos, params, feriados] = await Promise.all([
+  const [aps, tpes, os, recursos, params, feriados, ausencias] = await Promise.all([
     buscarTudo<any>('v_apontamentos', '*'),
     buscarTudo<any>('v_tpes', '*'),
     buscarTudo<any>('ordens_servico', '*'),
     buscarTudo<any>('recursos', '*', (q) => q.order('id')),
     supabase.rpc('parametros_vigentes', { p_dia: hojeISO() }),
     buscarTudo<any>('feriados', '*'),
+    // tabela da migração 0009; sem ela, segue sem férias
+    buscarTudo<any>('ausencias', '*').catch(() => [] as any[]),
   ])
   const num = (x: any) => (x == null ? null : Number(x))
   return {
     aps: aps.map((a) => ({ ...a, horas_normais: Number(a.horas_normais), horas_extras: Number(a.horas_extras), horas_totais: Number(a.horas_totais),
       custo_normal: num(a.custo_normal), custo_he: num(a.custo_he), custo_total: num(a.custo_total), custo_hh: num(a.custo_hh) })),
     tpes: tpes.map((t) => ({ ...t, horas_totais: Number(t.horas_totais), horas_extras: Number(t.horas_extras), horas_normais: Number(t.horas_normais), custo_total: num(t.custo_total) })),
-    os, recursos, parametros: params.data as any, ...lerDiasEspeciais(feriados), feriadosLista: feriados,
+    os, recursos, parametros: params.data as any, ...lerDiasEspeciais(feriados), feriadosLista: feriados, ausencias: ausencias as Ausencia[],
   }
 }
 
@@ -78,17 +81,18 @@ export function lerDiasEspeciais(linhas: any[]): { feriados: Set<string>; especi
 
 /** Cronograma da equipe sem custos (funções da migração 0008), para projetistas e Supervisor. */
 export async function carregarEquipe() {
-  const [tpes, recursos, dias] = await Promise.all([
+  const [tpes, recursos, dias, ausencias] = await Promise.all([
     supabase.rpc('cronograma_equipe'),
     supabase.from('recursos').select('*').order('id'),
     supabase.from('feriados').select('*'),
+    supabase.from('ausencias').select('*'),
   ])
   if (tpes.error) throw tpes.error
   if (recursos.error) throw recursos.error
   const lidos = lerDiasEspeciais(dias.data ?? [])
   return {
     tpes: (tpes.data ?? []).map((t: any) => ({ ...t, horas_totais: Number(t.horas_totais), qtd_apontamentos: Number(t.qtd_apontamentos) })),
-    recursos: recursos.data ?? [], dias: dias.data ?? [], ...lidos,
+    recursos: recursos.data ?? [], dias: dias.data ?? [], ausencias: (ausencias.error ? [] : ausencias.data ?? []) as Ausencia[], ...lidos,
   }
 }
 export async function calendarioEquipe(ini: string, fim: string) {
@@ -98,3 +102,6 @@ export async function calendarioEquipe(ini: string, fim: string) {
 }
 /** Mensagem amigável quando a migração ainda não foi aplicada. */
 export const faltaMigracao = (e: unknown) => /cronograma_equipe|calendario_equipe|schema cache|Could not find the function/i.test(String((e as any)?.message ?? e))
+
+/** Prazo final de cada O.S. em andamento (marcado nos cronogramas). */
+export const prazosDasOS = (os: any[]) => new Map<number, string>(os.filter((o) => o.prazo_final && o.status !== 'FINALIZADA').map((o) => [o.os, String(o.prazo_final).slice(0, 10)]))

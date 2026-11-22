@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { indicadores } from '../../lib/calculo'
-import { paraParametros, situacaoPrazo } from '../../lib/dados'
+import { paraParametros, prazosDasOS, situacaoPrazo } from '../../lib/dados'
 import { dataBR, h1, hm, hojeISO, int, pct, reais0, somaDias } from '../../lib/formato'
 import { Aviso, Cabecalho, Carregando, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
 import Gantt from '../../components/Gantt'
@@ -94,7 +94,7 @@ export default function Painel() {
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}><h2 style={{ margin: 0 }}>Cronograma da equipe</h2><Link to="/master/sequencias">Ajustar sequência</Link></div>
         <p className="muted small" style={{ margin: '0 0 12px' }}>Planejado (barra de cima) × realizado (barra de baixo) de cada projetista, dos últimos 15 dias até o último prazo ativo. Clique no nome para abrir a sequência.</p>
-        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} aoEscolher={(id) => navegar(`/master/sequencias?r=${id}`)} />
+        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ausencias={base.ausencias} prazosOS={prazosDasOS(base.os)} aoEscolher={(id) => navegar(`/master/sequencias?r=${id}`)} />
       </div>
       {pend.atrasadas.length > 0 && (
         <div className="card"><h2>TPEs com prazo vencido</h2>

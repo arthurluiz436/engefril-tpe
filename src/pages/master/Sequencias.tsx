@@ -3,8 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, osBR } from '../../lib/formato'
-import { situacaoPrazo } from '../../lib/dados'
-import { reprogramarFila } from '../../lib/agenda'
+import { prazosDasOS, situacaoPrazo } from '../../lib/dados'
+import { diasDeFeriasNoPeriodo, indisponiveis, reprogramarFila } from '../../lib/agenda'
 import { Cabecalho, Carregando, Icone, Selo, SeloPrazo, Vazio, useAvisar } from '../../components/ui'
 import Gantt from '../../components/Gantt'
 
@@ -31,7 +31,8 @@ export default function Sequencias() {
   const plano = useMemo(() => {
     if (!base || !mudou || !reprogramar) return null
     const outras = new Map(base.tpes.map((t: any) => [t.id, t]))
-    return reprogramarFila(lista, base.feriados, outras as any)
+    // dias que não contam: fins de semana, feriados e as férias deste projetista
+    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any)
   }, [base, lista, mudou, reprogramar])
   const novasDatas = useMemo(() => {
     if (!plano) return undefined
@@ -60,6 +61,11 @@ export default function Sequencias() {
   const ordem = useMemo(() => ({ recurso: rec, ids: lista.map((t) => t.id) }), [rec, lista])
   if (!base) return <Carregando />
   const porId = new Map(base.tpes.map((t: any) => [t.id, t]))
+  const prazosOS = prazosDasOS(base.os)
+  // TPE que termina depois do prazo final da O.S. (com as datas novas, se houver)
+  const foraDoPrazoOS = (t: any) => { const fim = planoDe(t.id)?.para[1] ?? t.prazo; const pz = prazosOS.get(t.os); return fim && pz && String(fim).slice(0, 10) > pz ? pz : null }
+  const qtdForaOS = lista.filter(foraDoPrazoOS).length
+  const feriasDe = (t: any) => { const p = planoDe(t.id); const a = p?.para[0] ?? t.data_inicio, b = p?.para[1] ?? t.prazo; return a && b ? diasDeFeriasNoPeriodo(String(a).slice(0, 10), String(b).slice(0, 10), base.feriados, base.ausencias, rec) : 0 }
   return (
     <div className="stack">
       <Cabecalho titulo="Sequência por projetista" texto="Defina a ordem de execução das tarefas em aberto de cada projetista. A primeira da lista aparece para ele como “Próxima atividade”. Ao mudar a ordem, as datas são reprogramadas mantendo a duração de cada TPE em dias úteis."
@@ -73,9 +79,10 @@ export default function Sequencias() {
           </div>
           <label className="row small" style={{ gap: 6 }}>
             <input type="checkbox" checked={reprogramar} onChange={(e) => setReprogramar(e.target.checked)} style={{ width: 16, minHeight: 0 }} />
-            Reprogramar as datas ao mudar a ordem (mantém a duração de cada TPE; pula sábados, domingos e feriados)
+            Reprogramar as datas ao mudar a ordem (mantém a duração de cada TPE; pula sábados, domingos, feriados e férias do projetista)
           </label>
           {plano && qtdMudancas > 0 && <div className="aviso info" role="status"><Icone n="info" /><div>Ao salvar, <strong>{qtdMudancas} TPE(s)</strong> terão início e prazo alterados (destacados abaixo). A fila começa em {dataBR(plano.find((p) => p.para[0])?.para[0])}.</div></div>}
+          {qtdForaOS > 0 && <div className="aviso atencao" role="status"><Icone n="alerta" /><div><strong>{qtdForaOS} TPE(s)</strong> terminam depois do prazo final da O.S. (marcadas abaixo e na linha tracejada do cronograma). Confira se a ordem está certa.</div></div>}
           <div className="card" style={{ padding: 0 }}>
             {lista.length === 0 ? <Vazio>Nenhuma tarefa em aberto atribuída a este projetista.</Vazio> : lista.map((t, i) => {
               const p = planoDe(t.id)
@@ -88,6 +95,8 @@ export default function Sequencias() {
                     {pred && <div className="small muted">Depois de <strong>{pred.codigo}</strong>{pred.responsavel && String(pred.responsavel_id) !== rec ? ` (${pred.responsavel})` : ''}</div>}
                     {p?.mudou && <div className="reprog small"><Icone n="relogio" t={14} /> Novo período: <strong>{dataBR(p.para[0])} → {dataBR(p.para[1])}</strong> ({p.dias} {p.dias === 1 ? 'dia útil' : 'dias úteis'})</div>}
                     {mudou && reprogramar && p && p.dias == null && <div className="small muted">Sem início ou prazo: as datas desta TPE não mudam.</div>}
+                    {foraDoPrazoOS(t) && <div className="aviso-os small"><Icone n="alerta" t={14} /> Termina depois do prazo da O.S. {osBR(t.os)} ({dataBR(foraDoPrazoOS(t))})</div>}
+                    {feriasDe(t) > 0 && <div className="small muted">Inclui {feriasDe(t)} dia(s) útil(eis) de férias do projetista, que não contam na duração.</div>}
                   </div>
                   <div className="row" style={{ gap: 4 }}>
                     <button className="btn sec pequeno" disabled={i === 0} onClick={() => mover(i, -1)} aria-label="Subir"><Icone n="cima" /></button>
@@ -105,7 +114,8 @@ export default function Sequencias() {
           <p className="muted small" style={{ margin: '0 0 12px' }}>
             Uma faixa por projetista, na cor dele{mudou ? ', já com a ordem e as datas ainda não salvas' : ''}. Barra de cima: <strong>planejado</strong>; de baixo: <strong>realizado</strong>. Passe o mouse para ver as datas; clique no nome para ver a sequência.
           </p>
-          <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ordem={ordem} datas={novasDatas} destaque={rec} aoEscolher={escolher} somente={soEste ? rec : undefined} />
+          <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ordem={ordem} datas={novasDatas} destaque={rec} aoEscolher={escolher} somente={soEste ? rec : undefined}
+            ausencias={base.ausencias} prazosOS={prazosOS} />
         </div>
       </div>
     </div>

@@ -26,6 +26,7 @@ Faça no projeto de teste e depois no de produção.
    6. `20261122000006_jornada_flexivel.sql`
    7. `20261122000007_predecessora_cor_exclusao.sql`
    8. `20261122000008_dias_atipicos_equipe.sql`
+   9. `20261122000009_os_ferias.sql`
 3. Confira em **Table Editor** que existem as tabelas `tpes`, `apontamentos`, `profiles`, entre outras. Cada uma deve mostrar o selo **RLS enabled**.
 
 *Alternativa com a linha de comando:* `npx supabase link --project-ref SEU_REF` e depois `npx supabase db push`.

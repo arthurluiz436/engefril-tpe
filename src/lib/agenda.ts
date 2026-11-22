@@ -92,3 +92,32 @@ export function clarear(hex: string, f: number): string {
   const m = (c: number) => Math.round(c + (255 - c) * f)
   return `rgb(${m(r)}, ${m(g)}, ${m(b)})`
 }
+
+// ---------------------------------------------------------------- férias e ausências
+export interface Ausencia { id?: number; recurso_id: number; inicio: string; fim: string; tipo?: string; observacao?: string | null }
+export const ROTULO_AUSENCIA: Record<string, string> = { FERIAS: 'Férias', LICENCA: 'Licença', OUTRO: 'Ausência' }
+
+/** Dias (inclusive) de férias/ausência de um projetista. */
+export function diasDeAusencia(aus: Ausencia[] = [], recursoId?: number | string | null): Set<string> {
+  const s = new Set<string>()
+  if (recursoId == null || recursoId === '') return s
+  for (const a of aus) {
+    if (String(a.recurso_id) !== String(recursoId)) continue
+    for (let d = String(a.inicio).slice(0, 10), k = 0; d <= String(a.fim).slice(0, 10) && k < 400; d = somaDiasCorridos(d, 1), k++) s.add(d)
+  }
+  return s
+}
+/** Feriados/dias sem expediente + férias do projetista: dias que não contam na duração das TPEs dele. */
+export function indisponiveis(feriados: Set<string>, aus: Ausencia[] = [], recursoId?: number | string | null): Set<string> {
+  const f = diasDeAusencia(aus, recursoId)
+  if (!f.size) return feriados
+  for (const d of feriados) f.add(d)
+  return f
+}
+/** Quantos dias úteis de férias caem dentro de um período. */
+export function diasDeFeriasNoPeriodo(ini: string, fim: string, feriados: Set<string>, aus: Ausencia[] = [], recursoId?: number | string | null): number {
+  const f = diasDeAusencia(aus, recursoId)
+  let n = 0
+  for (const d of f) if (d >= ini && d <= fim && ehDiaUtil(d, feriados)) n++
+  return n
+}
