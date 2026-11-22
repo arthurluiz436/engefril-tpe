@@ -3,7 +3,7 @@ import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { linhasDe } from '../../lib/conjuntos'
 import { dataBR, h1, hojeISO, reais0 } from '../../lib/formato'
-import { Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, useAvisar, useConfirmar } from '../../components/ui'
+import { Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, SeloPrazo, useAvisar, useConfirmar } from '../../components/ui'
 
 export default function OrdensServico() {
   const { base, recarregar } = useBase()
@@ -59,7 +59,7 @@ export default function OrdensServico() {
       <div className="rolagem"><table className="tabela"><thead><tr><th>O.S.</th><th>Cliente</th><th>Local</th><th>Nível</th><th>Vendedor</th><th>Classificação</th><th>Prazo final</th><th>Status</th><th className="num">TPEs (abertas)</th><th className="num">Horas</th><th className="num">Custo</th><th></th></tr></thead>
         <tbody>{linhas.map((o: any) => (
           <tr key={o.os}><td><strong>{o.os}</strong>{o.tipo === 'INTERNA' && <div><span className="badge">interna</span></div>}</td><td>{o.nome}</td><td className="small">{o.cidade}{o.uf ? `/${o.uf}` : ''}</td><td>{o.nivel}</td><td>{o.vendedor}</td><td className="small">{o.classificacao}</td>
-            <td>{dataBR(o.prazo_final)}{o.status !== 'FINALIZADA' && o.prazo_final && o.prazo_final < hojeISO() && <div><Selo v="ATRASADA" /></div>}</td><td><Selo v={o.status} /></td>
+            <td>{dataBR(o.prazo_final)}{o.status !== 'FINALIZADA' && o.prazo_final && o.prazo_final < hojeISO() && <div><SeloPrazo prazo={o.prazo_final} status={o.status} /></div>}</td><td><Selo v={o.status} /></td>
             <td className="num">{o.qtd_tpes} ({o.tpes_abertas})</td><td className="num">{h1(o.horas)}</td><td className="num">{reais0(o.custo)}</td>
             <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
               <button className="btn sec pequeno" onClick={() => setEd({ ...o, data_inicio: o.data_inicio ?? '', prazo_final: o.prazo_final ?? '' })}>Editar</button>

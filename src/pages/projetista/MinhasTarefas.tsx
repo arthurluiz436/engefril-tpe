@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
 import { mensagemErro } from '../../lib/supabase'
 import { dataBR, hm } from '../../lib/formato'
-import { Aviso, Cabecalho, Carregando, Selo, Vazio } from '../../components/ui'
+import { Aviso, Cabecalho, Carregando, Selo, SeloPrazo, Vazio } from '../../components/ui'
 
 export default function MinhasTarefas() {
   const [tarefas, setTarefas] = useState<Tarefa[] | null>(null)
@@ -37,7 +37,7 @@ export default function MinhasTarefas() {
           lista.map((t, i) => {
             const sit = situacaoPrazo(t.prazo, t.status)
             return (
-              <div key={t.tpe_id} className={`tarefa ${t === primeiraAberta ? 'proxima' : ''}`}>
+              <div key={t.tpe_id} className={`tarefa ${t === primeiraAberta ? 'proxima' : ''} ${sit === 'ATRASADA' ? 'em-atraso' : ''}`}>
                 <div className="ordem" title="Ordem de execução">{i + 1}</div>
                 <div>
                   <div className="row" style={{ gap: 8 }}>
@@ -54,7 +54,7 @@ export default function MinhasTarefas() {
                   {t.instrucoes && <div className="small" style={{ marginTop: 6 }}><strong>Instruções:</strong> {t.instrucoes}</div>}
                 </div>
                 <div className="stack" style={{ gap: 8, justifyItems: 'end' }}>
-                  <div className="row" style={{ gap: 6 }}><Selo v={t.status} />{sit && <Selo v={sit} />}</div>
+                  <div className="row" style={{ gap: 6 }}><Selo v={t.status} /><SeloPrazo prazo={t.prazo} status={t.status} /></div>
                   {t.status !== 'FINALIZADA' && <Link className="btn pequeno" to={`/registrar?tpe=${t.tpe_id}`}>Registrar</Link>}
                 </div>
               </div>

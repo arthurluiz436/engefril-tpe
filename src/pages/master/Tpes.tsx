@@ -5,7 +5,7 @@ import { supabase, mensagemErro } from '../../lib/supabase'
 import { situacaoPrazo } from '../../lib/dados'
 import { linhasDe } from '../../lib/conjuntos'
 import { dataBR, h1, hojeISO, pct } from '../../lib/formato'
-import { Aviso, Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, Vazio, useAvisar, useConfirmar } from '../../components/ui'
+import { Aviso, Cabecalho, Campo, Carregando, Dialogo, Icone, Selo, SeloPrazo, Vazio, useAvisar, useConfirmar } from '../../components/ui'
 
 const STATUS = ['NÃO INICIADA', 'EM ANDAMENTO', 'PAUSADA', 'FINALIZADA']
 
@@ -111,7 +111,7 @@ export default function Tpes() {
                 <td className="small" style={{ maxWidth: 320 }}>{t.descricao}</td>
                 <td>{t.responsavel ?? <span className="badge ambar">sem responsável</span>}{t.sequencia && <div className="small muted">seq. {t.sequencia}</div>}</td>
                 <td><Selo v={t.status} /></td>
-                <td>{dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><Selo v={situacaoPrazo(t.prazo, t.status)} /></div>}</td>
+                <td>{dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><SeloPrazo prazo={t.prazo} status={t.status} /></div>}</td>
                 <td className="num">{h1(t.horas_totais)}</td>
                 <td className="num">{t.consumo == null ? '—' : pct(t.consumo)}</td>
                 <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>

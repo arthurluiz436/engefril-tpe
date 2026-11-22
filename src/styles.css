@@ -158,14 +158,64 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: .86rem; }
 
 /* ---- Início do projetista: TPEs em foco, atrasos e lembrete do dia */
 .tpe-foco .ordem { display: inline-grid; place-items: center; min-width: 34px; height: 26px; padding: 0 8px; border-radius: 999px; background: var(--grafite-900); color: #fff; font-weight: 700; font-size: .8rem; }
-.tpe-foco.atrasada { border: 2px solid var(--vermelho); background: var(--vermelho-50); animation: vibrar 4s ease-in-out infinite; }
+/* Atraso: sinal estático (faixa vermelha à esquerda + selo com os dias de atraso), sem tremor contínuo. */
+.tpe-foco.atrasada { box-shadow: inset 5px 0 0 var(--vermelho), var(--sombra); background: linear-gradient(90deg, var(--vermelho-50), #fff 55%); border-color: #f3c4bf; }
 .tpe-foco.atrasada .ordem { background: var(--vermelho); }
 .texto-atraso { color: var(--vermelho); font-weight: 700; }
-@keyframes vibrar {
-  0%, 82%, 100% { transform: translateX(0); }
-  84% { transform: translateX(-4px) rotate(-.4deg); } 86% { transform: translateX(4px) rotate(.4deg); }
-  88% { transform: translateX(-3px); } 90% { transform: translateX(3px); } 92% { transform: translateX(-2px); } 94% { transform: translateX(1px); }
-}
 .lembrete-dia { animation: pulsar 2.4s ease-in-out infinite; border-radius: 10px; }
 @keyframes pulsar { 0%, 100% { box-shadow: 0 0 0 0 rgba(213, 149, 8, .0); } 50% { box-shadow: 0 0 0 6px rgba(213, 149, 8, .25); } }
-@media (prefers-reduced-motion: reduce) { .tpe-foco.atrasada, .lembrete-dia { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .lembrete-dia, .badge.atraso .ponto::after { animation: none; } }
+
+/* ---- Selo de atraso: texto + ponto com uma onda suave (3 vezes ao aparecer, depois para) */
+.badge.atraso { background: var(--vermelho-50); color: var(--vermelho); box-shadow: inset 0 0 0 1px #f3c4bf; }
+.badge.atraso .ponto { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--vermelho); flex: none; margin-right: 2px; }
+.badge.atraso .ponto::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--vermelho); animation: onda-atraso 1.6s ease-out 3; }
+@keyframes onda-atraso { from { transform: scale(1); opacity: .55; } to { transform: scale(3.2); opacity: 0; } }
+.tarefa.em-atraso { box-shadow: inset 4px 0 0 var(--vermelho); }
+
+/* ---- Sequência: lista à esquerda, cronograma à direita */
+.seq-layout { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(440px, 1.15fr); gap: 18px; align-items: start; }
+.seq-layout .seq-gantt { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+@media (max-width: 1250px) { .seq-layout { grid-template-columns: 1fr; } .seq-layout .seq-gantt { position: static; max-height: none; } }
+
+/* ---- Gantt por projetista */
+.gantt { --rot: 148px; display: grid; gap: 12px; }
+.gantt-legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--cinza-600); }
+.gantt-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.gantt-legenda .lg { display: inline-block; width: 18px; height: 8px; border-radius: 3px; }
+.lg.plan { background: var(--azul-100); box-shadow: inset 0 0 0 1px #9dbbe6; }
+.lg.real { background: var(--azul); }
+.lg.atraso { background: repeating-linear-gradient(135deg, var(--vermelho) 0 3px, #f6c9c4 3px 6px); }
+.gantt-legenda .lg.prazo { width: 9px; height: 9px; border-radius: 1px; background: var(--grafite-900); transform: rotate(45deg); }
+.gantt-legenda .lg.hoje { width: 2px; height: 14px; border-radius: 0; background: var(--dourado); }
+.gantt-corpo { position: relative; padding-top: 4px; }
+.gantt-eixo, .gantt-linha { display: grid; grid-template-columns: var(--rot) 1fr; align-items: stretch; }
+.gantt-eixo { height: 24px; border-bottom: 1px solid var(--cinza-200); }
+.gantt-trilha { position: relative; }
+.gantt-marca { position: absolute; top: 4px; transform: translateX(-50%); font-size: .68rem; color: var(--cinza-500); white-space: nowrap; }
+.gantt-marca.mes { color: var(--grafite-900); font-weight: 700; text-transform: capitalize; }
+.gantt-pista { border-bottom: 1px solid var(--cinza-100); padding: 6px 0 8px; }
+.gantt-pista.destaque { background: var(--azul-50); box-shadow: inset 3px 0 0 var(--azul); }
+.gantt-nome { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 2px 10px 4px; border: 0; background: none; font: inherit; text-align: left; color: inherit; width: 100%; }
+button.gantt-nome { cursor: pointer; }
+button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline; }
+.gantt-linha { height: 26px; }
+.gantt-linha:hover { background: rgba(4, 74, 179, .06); }
+.gantt-rot { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; min-width: 0; font-size: .78rem; }
+.gantt-n { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; background: var(--azul-50); color: var(--azul); font-weight: 700; font-size: .72rem; }
+.gantt-cod { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.gantt-linha.em-atraso .gantt-n { background: var(--vermelho); color: #fff; }
+.gantt-linha.feita { opacity: .65; }
+.gantt-linha.feita .gantt-n { background: var(--verde-50); color: var(--verde); }
+.gantt-plan, .gantt-real, .gantt-lacuna { position: absolute; border-radius: 4px; }
+.gantt-plan { top: 4px; height: 8px; background: var(--azul-100); box-shadow: inset 0 0 0 1px #9dbbe6; }
+.gantt-real { top: 14px; height: 8px; background: var(--azul); }
+.gantt-linha.feita .gantt-real { background: var(--verde); }
+.gantt-real.tarde { background: repeating-linear-gradient(135deg, var(--vermelho) 0 3px, #e9877e 3px 6px); }
+.gantt-lacuna { top: 2px; bottom: 2px; background: repeating-linear-gradient(135deg, rgba(180, 35, 24, .16) 0 4px, transparent 4px 8px); border-radius: 3px; }
+.gantt-prazo { position: absolute; top: 3px; width: 10px; height: 10px; margin-left: -5px; background: var(--grafite-900); transform: rotate(45deg); border-radius: 1px; z-index: 1; }
+.gantt-linha.em-atraso .gantt-prazo { background: var(--vermelho); }
+.gantt-semprazo { position: absolute; left: 4px; top: 5px; color: var(--cinza-500); font-style: italic; }
+.gantt-hoje { position: absolute; top: 28px; bottom: 0; width: 0; border-left: 2px solid var(--dourado); z-index: 2; pointer-events: none; }
+.gantt-hoje span { position: absolute; top: -26px; left: -1px; transform: translateX(-50%); background: var(--dourado); color: #fff; font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 99px; white-space: nowrap; }
+@media (max-width: 700px) { .gantt { --rot: 100px; } .gantt-cod { font-size: .7rem; } }

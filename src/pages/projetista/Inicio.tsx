@@ -4,7 +4,7 @@ import { useAuth } from '../../lib/auth'
 import { minhasTarefas, situacaoPrazo, type Tarefa } from '../../lib/dados'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, hm, hojeISO, somaDias } from '../../lib/formato'
-import { Aviso, Carregando, Dialogo, Icone, Kpi, Selo } from '../../components/ui'
+import { Aviso, Carregando, Dialogo, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
 
 export default function Inicio() {
   const { perfil } = useAuth()
@@ -88,7 +88,7 @@ export default function Inicio() {
           {listaFoco.length > 0 && (
             <div className="stack" style={{ gap: 10 }}>
               <h2>{foco.length ? 'TPEs em andamento e atrasadas' : 'Próxima atividade'}</h2>
-              {foco.length > 0 && <p className="muted small" style={{ margin: 0 }}>Na ordem de execução definida pelo Supervisor.{atrasadas ? ' As atrasadas estão destacadas em vermelho.' : ''}</p>}
+              {foco.length > 0 && <p className="muted small" style={{ margin: 0 }}>Na ordem de execução definida pelo Supervisor.{atrasadas ? ' As atrasadas têm uma faixa vermelha à esquerda e mostram há quantos dias o prazo venceu.' : ''}</p>}
               {listaFoco.map((t, i) => {
                 const sit = situacaoPrazo(t.prazo, t.status)
                 const atrasada = sit === 'ATRASADA'
@@ -98,14 +98,14 @@ export default function Inicio() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="row" style={{ gap: 8 }}>
                           <span className="ordem" title="Ordem de execução">{t.sequencia ?? i + 1}º</span>
-                          {atrasada && <span className="badge vermelho">⚠ ATRASADA</span>}
+                          <SeloPrazo prazo={t.prazo} status={t.status} />
                           <Selo v={t.status} />
                         </div>
                         <h2 style={{ marginTop: 8 }}>{t.codigo} · {t.principal} › {t.grupo}</h2>
                         <p style={{ margin: '6px 0' }}>{t.descricao}</p>
                         <div className="row small muted"><span>O.S. {t.os} · {t.cliente}</span>
                           <span className={atrasada ? 'texto-atraso' : ''}>Prazo: {dataBR(t.prazo)}</span>
-                          {!atrasada && <Selo v={sit} />}</div>
+                          </div>
                         {t.instrucoes && <Aviso tipo="info"><strong>Instruções:</strong> {t.instrucoes}</Aviso>}
                       </div>
                       <Link className="btn" to={`/registrar?tpe=${t.tpe_id}`}>Registrar nesta TPE</Link>

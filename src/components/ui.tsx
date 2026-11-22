@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { situacaoPrazo } from '../lib/dados'
+import { dataBR, diasEntre, hojeISO } from '../lib/formato'
 
 // ------------------------------------------------------------------ ícones (SVG próprios, traço 1.8)
 const P: Record<string, string> = {
@@ -87,6 +89,26 @@ const COR_STATUS: Record<string, string> = {
 export function Selo({ v }: { v?: string | null }) {
   if (!v) return <span className="muted">—</span>
   return <span className={`badge ${COR_STATUS[v] ?? ''}`}>{v}</span>
+}
+
+/**
+ * Situação do prazo com contagem de dias: "Atrasada há 3 dias", "Vence amanhã", "No prazo".
+ * Atraso = texto + ponto vermelho (não depende só da cor). O ponto emite uma onda suave
+ * 3 vezes ao aparecer e para (sem movimento contínuo; desligado com "reduzir movimento").
+ */
+export function SeloPrazo({ prazo, status, vazio = null }: { prazo?: string | null; status: string; vazio?: ReactNode }) {
+  const sit = situacaoPrazo(prazo ?? null, status)
+  if (!sit || !prazo) return <>{vazio}</>
+  const hoje = hojeISO()
+  if (sit === 'ATRASADA') {
+    const d = diasEntre(prazo, hoje)
+    return <span className="badge atraso" title={`O prazo era ${dataBR(prazo)}`}><span className="ponto" aria-hidden="true" />Atrasada há {d} {d === 1 ? 'dia' : 'dias'}</span>
+  }
+  if (sit === 'VENCE EM BREVE') {
+    const d = diasEntre(hoje, prazo)
+    return <span className="badge ambar" title={`Prazo: ${dataBR(prazo)}`}><Icone n="relogio" t={13} />{d === 0 ? 'Vence hoje' : d === 1 ? 'Vence amanhã' : `Vence em ${d} dias`}</span>
+  }
+  return <span className="badge verde" title={`Prazo: ${dataBR(prazo)}`}>No prazo</span>
 }
 
 export function Dialogo({ titulo, aberto, aoFechar, children, largo }: { titulo: string; aberto: boolean; aoFechar: () => void; children: ReactNode; largo?: boolean }) {

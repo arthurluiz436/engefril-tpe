@@ -1,13 +1,15 @@
 import { useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { indicadores } from '../../lib/calculo'
 import { paraParametros, situacaoPrazo } from '../../lib/dados'
 import { dataBR, h1, hm, hojeISO, int, pct, reais0, somaDias } from '../../lib/formato'
-import { Aviso, Cabecalho, Carregando, Icone, Kpi, Selo } from '../../components/ui'
+import { Aviso, Cabecalho, Carregando, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
+import Gantt from '../../components/Gantt'
 
 export default function Painel() {
   const { base, erro, recarregar, carregando, atualizadoEm } = useBase()
+  const navegar = useNavigate()
   const k = useMemo(() => base && indicadores(base.aps, base.tpes, base.os, base.recursos.map((r: any) => r.nome), paraParametros(base.parametros), base.feriados), [base])
   const pend = useMemo(() => {
     if (!base) return null
@@ -85,10 +87,15 @@ export default function Painel() {
               <td className="num">{pct(x.pct_he)}</td><td className="num">{x.tpes_atendidos}</td></tr>))}</tbody></table>
         <p className="muted small">Índice de alocação = horas apontadas ÷ capacidade (dias úteis entre o 1º e o último apontamento × 9 h seg–qui / 8 h sex). Não mede conclusão de tarefas.</p>
       </div>
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}><h2 style={{ margin: 0 }}>Cronograma da equipe</h2><Link to="/master/sequencias">Ajustar sequência</Link></div>
+        <p className="muted small" style={{ margin: '0 0 12px' }}>Planejado (barra de cima) × realizado (barra de baixo) de cada projetista, dos últimos 30 dias até o último prazo ativo. Clique no nome para abrir a sequência.</p>
+        <Gantt tpes={base.tpes} recursos={base.recursos} aoEscolher={(id) => navegar(`/master/sequencias?r=${id}`)} />
+      </div>
       {pend.atrasadas.length > 0 && (
         <div className="card"><h2>TPEs com prazo vencido</h2>
-          <table className="tabela"><thead><tr><th>TPE</th><th>Cliente</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead>
-            <tbody>{pend.atrasadas.slice(0, 15).map((t: any) => <tr key={t.id}><td>{t.codigo}</td><td>{t.cliente}</td><td>{t.responsavel}</td><td>{dataBR(t.prazo)}</td><td><Selo v={t.status} /></td></tr>)}</tbody></table></div>
+          <table className="tabela"><thead><tr><th>TPE</th><th>Cliente</th><th>Responsável</th><th>Prazo</th><th>Atraso</th><th>Status</th></tr></thead>
+            <tbody>{pend.atrasadas.slice(0, 15).map((t: any) => <tr key={t.id}><td>{t.codigo}</td><td>{t.cliente}</td><td>{t.responsavel}</td><td>{dataBR(t.prazo)}</td><td><SeloPrazo prazo={t.prazo} status={t.status} /></td><td><Selo v={t.status} /></td></tr>)}</tbody></table></div>
       )}
     </div>
   )
