@@ -142,7 +142,7 @@ export default function Tpes() {
       while (fila.length) { const x = fila.pop(); bloqueadas.add(x); for (const t of base.tpes) if (t.predecessora_id === x && !bloqueadas.has(t.id)) fila.push(t.id) }
     }
     return base.tpes.filter((t: any) => !t.arquivada && !bloqueadas.has(t.id)).sort((a: any, z: any) => z.numero - a.numero || z.revisao - a.revisao)
-  }, [base, ed?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, ed?.id, !!ed]) // eslint-disable-line react-hooks/exhaustive-deps -- recalcula ao abrir o formulário (TPE nova não tem id)
 
   const erros = ed ? {
     os: !ed.os ? 'Escolha a O.S.' : null,

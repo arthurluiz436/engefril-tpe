@@ -121,7 +121,8 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
       else {
         // intervalo salvo entre as duas (1 = dia útil seguinte; 0 = começa no dia em que a anterior termina; 2+ = folga)
         const viz = anterior && anteriorSalva.get(t.id) === anterior ? anterior : null
-        const lag = viz ? desvioDiasUteis(viz.prazo!.slice(0, 10), di, feriados) : 1
+        // folga salva (>1) é mantida; sobreposição ou passagem no mesmo dia (≤0) vira escada: dia útil seguinte
+        const lag = viz ? Math.max(1, desvioDiasUteis(viz.prazo!.slice(0, 10), di, feriados)) : 1
         ini = moverDiasUteis(fimAnterior, lag, feriados)
       }
       if (hojeUtil && ini < hojeUtil) ini = hojeUtil

@@ -5,6 +5,7 @@ import { aguardandoPredecessora, minhasTarefas, situacaoPrazo, type Tarefa } fro
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, hm, hojeISO, osBR, somaDias } from '../../lib/formato'
 import { Aviso, Carregando, Dialogo, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
+import MeuDesempenho from '../../components/MeuDesempenho'
 
 interface ApHoje {
   id: number; seq: number; tpe_codigo: string; grupo: string; tpe_descricao: string; hora_inicio: string; hora_fim: string; descricao: string
@@ -148,6 +149,7 @@ export default function Inicio() {
             <Kpi rotulo="Vencem em até 3 dias" valor={breve} />
             <Kpi rotulo="Horas lançadas (7 dias)" valor={hm(semana)} />
           </div>
+          {perfil?.recurso_id && <MeuDesempenho recursoId={perfil.recurso_id} />}
           {perfil?.recurso_id && listaHoje && <ApontamentosHoje lista={listaHoje} proximaTpe={proxima?.tpe_id} />}
           {listaFoco.length > 0 && (
             <div className="stack" style={{ gap: 10 }}>

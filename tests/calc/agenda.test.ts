@@ -133,13 +133,20 @@ describe('Início editado à mão e intervalos salvos', () => {
     { id: 2, codigo: 'TPE-002.0', data_inicio: '2026-11-24', prazo: '2026-11-25' }, // começa no dia em que a 1 termina
     { id: 3, codigo: 'TPE-003.0', data_inicio: '2026-11-30', prazo: '2026-12-01' }, // folga de 2 dias úteis (qui, sex)
   ]
-  it('sem mudança, mantém passagem no mesmo dia e folgas salvas', () => {
+  it('passagem no mesmo dia vira escada (dia útil seguinte); folga salva é mantida', () => {
     const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { ordemSalva: [1, 2, 3] })
-    expect(r.some((x) => x.mudou)).toBe(false)
+    expect(r.map((x) => x.para)).toEqual([['2026-11-23', '2026-11-24'], ['2026-11-25', '2026-11-26'], ['2026-12-01', '2026-12-02']])
   })
-  it('início da 1ª à mão empurra as seguintes mantendo durações e intervalos', () => {
+  it('tarefas sobrepostas são separadas em escada, sem duas no mesmo dia', () => {
+    const r = reprogramarFila([
+      { id: 1, codigo: 'A', data_inicio: '2026-11-23', prazo: '2026-11-27' },
+      { id: 2, codigo: 'B', data_inicio: '2026-11-24', prazo: '2026-11-25' },
+    ], S, new Map(), '2026-11-20', { ordemSalva: [1, 2] })
+    expect(r[1].para).toEqual(['2026-11-30', '2026-12-01'])
+  })
+  it('início da 1ª à mão empurra as seguintes mantendo durações e folgas', () => {
     const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { ordemSalva: [1, 2, 3], inicios: new Map([[1, '2026-11-25']]) })
-    expect(r.map((x) => x.para)).toEqual([['2026-11-25', '2026-11-26'], ['2026-11-26', '2026-11-27'], ['2026-12-02', '2026-12-03']])
+    expect(r.map((x) => x.para)).toEqual([['2026-11-25', '2026-11-26'], ['2026-11-27', '2026-11-30'], ['2026-12-03', '2026-12-04']])
     expect(r[0].manual).toBe(true)
   })
   it('data à mão em fim de semana vai para o próximo dia útil', () => {
