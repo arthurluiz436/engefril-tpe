@@ -101,11 +101,15 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
   let anterior: TarefaAgenda | null = null
   const novoInicio = new Map<number, string>()
   const primeiroInicio = proximoDiaUtil(comDatas.map((t) => t.data_inicio!.slice(0, 10)).sort()[0], feriados)
+  // Só as TPEs iniciadas que estão no COMEÇO da fila ficam presas às datas reais. Uma TPE com apontamento
+  // antigo colocada depois de uma não iniciada segue a ordem da fila (escada), como o Supervisor definiu.
+  let soIniciadasAteAqui = true
   return fila.map((t) => {
     if (!t.data_inicio || !t.prazo) return fixa(t)
     const di = t.data_inicio.slice(0, 10), pz = t.prazo.slice(0, 10)
     const dias = Math.max(1, diasUteisEntre(di, pz, feriados))
-    if (hoje && comecou(t)) {
+    if (!(hoje && comecou(t))) soIniciadasAteAqui = false
+    if (hoje && comecou(t) && soIniciadasAteAqui) {
       const real = (t.primeiro_apontamento ? String(t.primeiro_apontamento).slice(0, 10) : di)
       let fimEf = fimPorDiasUteis(real, dias, feriados)
       if (fimEf < hoje) fimEf = hojeUtil!

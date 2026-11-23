@@ -154,3 +154,21 @@ describe('Início editado à mão e intervalos salvos', () => {
     expect(r[1].para).toEqual(['2026-11-30', '2026-12-01'])
   })
 })
+
+describe('Reordenar com TPE que já tem apontamento antigo (caso Beatriz)', () => {
+  const S = new Set<string>()
+  // 148 em andamento; 149 não iniciada; 097.1 tem apontamento antigo; 160 não iniciada
+  const t148 = { id: 148, codigo: 'TPE-148.0', data_inicio: '2026-11-18', prazo: '2026-11-24', status: 'EM ANDAMENTO', primeiro_apontamento: '2026-11-18' }
+  const t149 = { id: 149, codigo: 'TPE-149.0', data_inicio: '2026-11-25', prazo: '2026-11-26' }
+  const t097 = { id: 97, codigo: 'TPE-097.1', data_inicio: '2026-11-27', prazo: '2026-12-02', status: 'NÃO INICIADA', primeiro_apontamento: '2026-11-04' }
+  const t160 = { id: 160, codigo: 'TPE-160.0', data_inicio: '2026-12-03', prazo: '2026-12-04' }
+  it('ao passar a 160 para antes da 097.1, as datas seguem a nova ordem em escada', () => {
+    const r = reprogramarFila([t148, t149, t160, t097], S, new Map(), '2026-11-23', { ordemSalva: [148, 149, 97, 160] })
+    const p = new Map(r.map((x) => [x.codigo, x.para]))
+    expect(p.get('TPE-148.0')).toEqual(['2026-11-18', '2026-11-24'])           // em andamento no começo: datas mantidas
+    expect(p.get('TPE-149.0')).toEqual(['2026-11-25', '2026-11-26'])
+    expect(p.get('TPE-160.0')).toEqual(['2026-11-27', '2026-11-30'])           // 2 dias úteis logo após a 149
+    expect(p.get('TPE-097.1')).toEqual(['2026-12-01', '2026-12-04'])           // 4 dias úteis depois da 160
+    for (let i = 1; i < r.length; i++) expect(r[i].para[0]! > r[i - 1].para[1]!).toBe(true) // escada: nenhuma sobreposição
+  })
+})
