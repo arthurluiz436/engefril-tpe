@@ -24,10 +24,16 @@ export default function Usuarios() {
   }
   async function convidar() {
     setEnviando(true)
+    const email = convite.email.trim().toLowerCase()
     try {
-      await admin('convidar', { email: convite.email.trim().toLowerCase(), nome: convite.nome.trim(), recurso_id: convite.recurso_id ? Number(convite.recurso_id) : null, papel: convite.papel })
+      await admin('convidar', { email, nome: convite.nome.trim(), recurso_id: convite.recurso_id ? Number(convite.recurso_id) : null, papel: convite.papel })
       avisar('ok', 'Convite enviado por e-mail. O usuário definirá a própria senha pelo link.'); setConvite(null); carregar()
-    } catch (e) { avisar('erro', mensagemErro(e)) } finally { setEnviando(false) }
+    } catch (e) {
+      // antes de mostrar erro, confere no banco se o convite foi criado mesmo assim (ex.: resposta perdida ou repetida)
+      const { data: ja } = await supabase.from('profiles').select('user_id, nome').eq('email', email).maybeSingle()
+      if (ja) { avisar('ok', `O convite para ${email} foi criado e o e-mail enviado. Confira a lista abaixo.`); setConvite(null); carregar(); return }
+      avisar('erro', explicarErroConvite(mensagemErro(e), email))
+    } finally { setEnviando(false) }
   }
   async function alterar(p: any, campos: Record<string, unknown>, rotulo: string) {
     if (!(await confirmar('Confirmar alteração', <>{rotulo} para <strong>{p.nome || p.email}</strong>?</>))) return
@@ -93,4 +99,14 @@ export default function Usuarios() {
       </Dialogo>
     </div>
   )
+}
+
+/** Traduz as respostas do Supabase Auth para o Supervisor. */
+function explicarErroConvite(msg: string, email: string): string {
+  if (/is invalid|email_address_invalid/i.test(msg))
+    return `O Supabase recusou o endereço ${email}: ele confere se o e-mail pode receber mensagens e este parece não existir (no Gmail, por exemplo, o nome antes do @ tem no mínimo 6 caracteres). Confira o endereço com a pessoa.`
+  if (/already been registered|already registered|exists/i.test(msg)) return `Já existe um acesso com ${email}. Use Reativar na lista, se estiver desativado.`
+  if (/rate limit|too many/i.test(msg)) return 'Limite de envio de e-mails do Supabase atingido (poucos por hora no envio padrão). Tente de novo mais tarde ou configure o SMTP da empresa.'
+  if (/not authorized/i.test(msg)) return `O envio padrão do Supabase só manda e-mail para endereços autorizados. Configure o SMTP da empresa (Authentication › Emails › SMTP) para convidar ${email}.`
+  return msg
 }

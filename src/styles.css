@@ -314,7 +314,8 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 @media print { .periodo { display: none; } }
 .g2-rot-pista strong { flex: 0 1 auto; min-width: 48px; }
 .g2-rot-pista .small { flex: 1 1 0; min-width: 0; }
-.g2-rot-tarefa .gantt-cod { flex: 0 1 auto; min-width: 0; }
+.g2-rot-tarefa .gantt-cod { flex: none; overflow: visible; }
+.g2-rot-tarefa .g2-os { flex: none; }
 .g2-passa { padding: 0 4px; }
 
 /* ---- Calendário (modelo de agenda mensal) */

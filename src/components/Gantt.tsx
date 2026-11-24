@@ -57,7 +57,7 @@ interface Pista { id: string; nome: string; cor: string; abertas: any[]; conclui
 export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
     mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS } = p
-  const ROT = p.rotulo ?? 206
+  const ROT = p.rotulo ?? 272
   const somente = p.somente == null ? null : new Set(Array.isArray(p.somente) ? p.somente : [p.somente])
   const hoje = hojeISO()
   const trilhaRef = useRef<HTMLDivElement>(null)

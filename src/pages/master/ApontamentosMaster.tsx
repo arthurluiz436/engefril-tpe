@@ -5,6 +5,8 @@ import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, h1, hhmm, hojeISO, reais, somaDias } from '../../lib/formato'
 import { min } from '../../lib/calculo'
 import { Aviso, Cabecalho, Campo, Carregando, Dialogo, Icone, useAvisar } from '../../components/ui'
+import { useOrdem } from '../../components/Ordenacao'
+import { corRecurso } from '../../lib/agenda'
 
 export default function ApontamentosMaster() {
   const { base, recarregar } = useBase()
@@ -15,6 +17,14 @@ export default function ApontamentosMaster() {
   const [ed, setEd] = useState<any | null>(null)
   const [exc, setExc] = useState<any | null>(null)
   const soSobrepostos = qs.get('f') === 'sobrepostos'
+  // ordenação por coluna (padrão: mais recente primeiro) e cor de cada projetista
+  const ord = useOrdem({ k: 'quando', dir: -1 })
+  const cores = useMemo(() => new Map((base?.recursos ?? []).map((r: any, i: number) => [String(r.id), corRecurso(r, i)])), [base])
+  const VALOR: Record<string, (a: any) => any> = {
+    seq: (a) => Number(a.seq), quando: (a) => `${a.dia} ${a.hora_inicio}`, projetista: (a) => a.recurso_nome, tpe: (a) => a.tpe_codigo,
+    horario: (a) => a.hora_inicio, normais: (a) => Number(a.horas_normais), extras: (a) => Number(a.horas_extras), custo: (a) => Number(a.custo_total ?? 0),
+    descricao: (a) => a.descricao, origem: (a) => a.origem,
+  }
 
   const linhas = useMemo(() => {
     if (!base) return []
@@ -28,8 +38,8 @@ export default function ApontamentosMaster() {
     } else ls = ls.filter((a: any) => a.dia >= de && a.dia <= ate)
     if (rec) ls = ls.filter((a: any) => String(a.recurso_id) === rec)
     if (tpe) ls = ls.filter((a: any) => a.tpe_codigo.includes(tpe.toUpperCase()))
-    return [...ls].sort((a: any, b: any) => b.dia.localeCompare(a.dia) || b.hora_inicio.localeCompare(a.hora_inicio))
-  }, [base, de, ate, rec, tpe, soSobrepostos])
+    return ord.ordenar([...ls], (a: any, k) => VALOR[k](a))
+  }, [base, de, ate, rec, tpe, soSobrepostos, ord.ord]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvar() {
     if (min(ed.hora_fim) <= min(ed.hora_inicio)) return avisar('erro', 'Término deve ser depois do início.')
@@ -55,11 +65,11 @@ export default function ApontamentosMaster() {
         {!soSobrepostos && <><Campo rotulo="De"><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></Campo><Campo rotulo="Até"><input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></Campo></>}
         <Campo rotulo="Projetista"><select value={rec} onChange={(e) => setRec(e.target.value)}><option value="">Todos</option>{base.recursos.map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
         <Campo rotulo="TPE"><input value={tpe} onChange={(e) => setTpe(e.target.value)} placeholder="TPE-012" /></Campo>
-        <span className="muted small">{linhas.length} apontamentos · {h1(total)} h</span>
+        <span className="muted small">{linhas.length} apontamentos · {h1(total)} h · clique no título da coluna para ordenar</span>
       </div>
-      <div className="rolagem"><table className="tabela"><thead><tr><th>Nº</th><th>Data</th><th>Projetista</th><th>TPE</th><th>Horário</th><th className="num">Normais</th><th className="num">Extras</th><th className="num">Custo</th><th>Descrição</th><th>Origem</th><th></th></tr></thead>
+      <div className="rolagem"><table className="tabela"><thead><tr><ord.Th k="seq">Nº</ord.Th><ord.Th k="quando">Data</ord.Th><ord.Th k="projetista">Projetista</ord.Th><ord.Th k="tpe">TPE</ord.Th><ord.Th k="horario">Horário</ord.Th><ord.Th k="normais" num>Normais</ord.Th><ord.Th k="extras" num>Extras</ord.Th><ord.Th k="custo" num>Custo</ord.Th><ord.Th k="descricao">Descrição</ord.Th><ord.Th k="origem">Origem</ord.Th><th></th></tr></thead>
         <tbody>{linhas.slice(0, 1000).map((a: any) => (
-          <tr key={a.id}><td>{a.seq}</td><td>{dataBR(a.dia)}{a.tipo_dia !== 'DIA ÚTIL' && <div className="small muted">{a.tipo_dia}</div>}</td><td>{a.recurso_nome}</td><td>{a.tpe_codigo}</td>
+          <tr key={a.id} style={{ boxShadow: `inset 3px 0 0 ${cores.get(String(a.recurso_id)) ?? 'transparent'}` }}><td>{a.seq}</td><td>{dataBR(a.dia)}{a.tipo_dia !== 'DIA ÚTIL' && <div className="small muted">{a.tipo_dia}</div>}</td><td className="sem-quebra"><span className="ind-proj" style={{ fontWeight: 600, color: cores.get(String(a.recurso_id)) }}><span className="g2-ponto" style={{ background: cores.get(String(a.recurso_id)) }} />{a.recurso_nome}</span></td><td className="sem-quebra">{a.tpe_codigo}</td>
             <td className="mono">{hhmm(a.hora_inicio)}–{hhmm(a.hora_fim)}</td><td className="num">{h1(a.horas_normais)}</td><td className="num">{a.horas_extras ? h1(a.horas_extras) : '—'}</td><td className="num">{reais(a.custo_total)}</td>
             <td className="small" style={{ maxWidth: 300 }}>{a.descricao}</td><td><span className="badge">{a.origem}</span></td>
             <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
