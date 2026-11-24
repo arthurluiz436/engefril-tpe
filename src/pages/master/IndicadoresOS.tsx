@@ -275,7 +275,7 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
           <Card rot="Custo de mão de obra" val={reais0(R.custo)} sub={`${reais(a.custos.porHora)} por hora`} />
           <Card rot="Início → fim previsto" val={<span className="ios-datas">{dataBR(R.ini)} → {dataBR(R.prazoFinal)}</span>} sub={a.prazo.prazoTotal ? `prazo total: ${iv(a.prazo.prazoTotal)}` : 'datas incompletas no cadastro'} />
           <Card rot="1º → último apontamento" val={<span className="ios-datas">{dataBR(R.primeiroAp)} → {dataBR(R.ultimoAp)}</span>} sub={a.prazo.janela ? iv(a.prazo.janela) : 'sem apontamentos'} />
-          <Card rot="Projetistas envolvidos" val={a.porProjetista.length} sub={a.porProjetista[0] ? <>maior participação: <strong style={{ color: corProj.get(a.porProjetista[0].rotulo) ?? 'inherit' }}><span className="g2-ponto" style={{ background: corProj.get(a.porProjetista[0].rotulo), display: 'inline-block', marginRight: 4, width: 8, height: 8 }} />{a.porProjetista[0].rotulo}</strong></> : '—'} />
+          <Card rot="Projetistas envolvidos" val={a.porProjetista.length} sub={a.porProjetista[0] ? <>maior participação: <span style={{ color: corProj.get(a.porProjetista[0].rotulo) ?? 'inherit', fontWeight: 600 }}><span className="g2-ponto" style={{ background: corProj.get(a.porProjetista[0].rotulo), display: 'inline-block', marginRight: 4, width: 7, height: 7 }} />{a.porProjetista[0].rotulo}</span></> : '—'} />
         </div>
       </section>
 
@@ -284,22 +284,22 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
           {/* ---------------- 2. distribuição de esforço */}
           <section className="card">
             <h2>2. Distribuição de esforço</h2>
-            <p className="muted small">Hierarquia dos apontamentos: grupo principal → grupo → tarefa (TPE, com as revisões somadas). Cada visão soma exatamente {h1(R.horas)} h.</p>
+            <p className="muted small">Hierarquia dos apontamentos: grupo → grupo › principal → tarefa (TPE, com as revisões somadas). Cada visão soma exatamente {h1(R.horas)} h.</p>
             <div className="ios-2col">
-              <div><h3>Por grupo principal</h3><Rosca itens={a.porPrincipal} centro={`${h1(R.horas)} h`} sub="total da O.S." /></div>
-              <div><h3>Por grupo</h3><Barras itens={a.porGrupo} cores={(f) => CORES[a.porPrincipal.findIndex((p) => p.chave === f.principal) % CORES.length] ?? 'var(--azul)'} /></div>
+              <div><h3>Por grupo</h3><Rosca itens={a.porPrincipal} centro={`${h1(R.horas)} h`} sub="total da O.S." /></div>
+              <div><h3>Por grupo › principal</h3><Barras itens={a.porGrupo} cores={(f) => CORES[a.porPrincipal.findIndex((p) => p.chave === f.principal) % CORES.length] ?? 'var(--azul)'} /></div>
             </div>
             <div className="ios-2col">
               <div><h3>Por tipo de dia do apontamento</h3><Barras itens={a.porTipoDia} cores={(f) => (f.chave === 'DIA ÚTIL' ? 'var(--azul)' : 'var(--ambar)')} /></div>
               <div className="ios-mms">
-                <MaiorMenor titulo="Grupo principal" e={a.extremos.principal} />
-                <MaiorMenor titulo="Grupo" e={a.extremos.grupo} />
+                <MaiorMenor titulo="Grupo" e={a.extremos.principal} />
+                <MaiorMenor titulo="Grupo › principal" e={a.extremos.grupo} />
                 <MaiorMenor titulo="Tarefa (TPE)" e={a.extremos.tpe} />
                 <span className="muted small">Só entram itens com horas apontadas.</span>
               </div>
             </div>
             <h3>Ranking das tarefas por horas</h3>
-            <div className="rolagem" style={{ maxHeight: 380 }}><table className="tabela"><thead><tr><th>#</th><oTpe.Th k="chave">TPE</oTpe.Th><oTpe.Th k="grupoCompleto">Grupo principal › grupo</oTpe.Th><oTpe.Th k="descricao">Descrição</oTpe.Th><oTpe.Th k="horas" num>Horas</oTpe.Th><oTpe.Th k="pctHoras" num>% horas</oTpe.Th><oTpe.Th k="extras" num>H. extras</oTpe.Th><oTpe.Th k="revisoes" num>Revisões</oTpe.Th><oTpe.Th k="projetistas" num>Projetistas</oTpe.Th></tr></thead>
+            <div className="rolagem" style={{ maxHeight: 380 }}><table className="tabela"><thead><tr><th>#</th><oTpe.Th k="chave">TPE</oTpe.Th><oTpe.Th k="grupoCompleto">Grupo › principal</oTpe.Th><oTpe.Th k="descricao">Descrição</oTpe.Th><oTpe.Th k="horas" num>Horas</oTpe.Th><oTpe.Th k="pctHoras" num>% horas</oTpe.Th><oTpe.Th k="extras" num>H. extras</oTpe.Th><oTpe.Th k="revisoes" num>Revisões</oTpe.Th><oTpe.Th k="projetistas" num>Projetistas</oTpe.Th></tr></thead>
               <tbody>{oTpe.ordenar(a.porTpe.filter((t) => t.horas > 0), valorFatia).map((t, i) => <tr key={t.chave}><td>{i + 1}</td><td className="sem-quebra"><strong>{t.chave}</strong></td><td className="small">{t.principal} › {t.grupo}</td><td className="small" style={{ maxWidth: 360 }}>{t.descricao}</td><td className="num">{h1(t.horas)}</td><td className="num">{pct(t.pctHoras)}</td><td className="num">{t.extras > 0.0001 ? <span className="ind-he">{h1(t.extras)}</span> : '—'}</td><td className="num">{t.revisoes || '—'}</td><td className="num">{t.projetistas}</td></tr>)}</tbody></table></div>
           </section>
 

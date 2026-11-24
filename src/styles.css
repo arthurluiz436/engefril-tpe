@@ -78,7 +78,9 @@ a { color: var(--azul); }
 .acao-grande strong { font-size: 1.25rem; }
 .acao-grande span { opacity: .85; }
 .acao-grande:hover { filter: brightness(1.05); transform: translateY(-1px); }
-label.campo, div.campo { display: grid; gap: 6px; font-weight: 600; font-size: .88rem; color: var(--grafite-900); }
+label.campo, div.campo { display: grid; gap: 6px; font-weight: 600; font-size: .88rem; color: var(--grafite-900); align-content: start; grid-auto-rows: max-content; }
+/* todas as caixas com a mesma altura: linhas dos formulários alinhadas */
+input:not([type='checkbox']):not([type='radio']):not([type='range']), select { height: 40px; }
 label.campo .ajuda, div.campo .ajuda { font-weight: 400; color: var(--cinza-600); font-size: .8rem; }
 input, select, textarea { font: inherit; font-size: .95rem; padding: 9px 11px; border: 1px solid var(--cinza-300); border-radius: var(--raio-sm); background: #fff; color: var(--texto); min-height: 40px; width: 100%; }
 input:focus, select:focus, textarea:focus { border-color: var(--azul); box-shadow: var(--foco); outline: none; }
@@ -393,7 +395,7 @@ th.num .th-ordem { justify-content: flex-end; }
 /* Sequência: data de início editável por TPE */
 .inicio-manual { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 6px; }
 .inicio-manual > span:first-child { font-weight: 600; color: var(--grafite-900); }
-.inicio-manual input[type='date'] { width: auto; min-height: 30px; padding: 3px 8px; font-size: .82rem; }
+.inicio-manual input[type='date'] { width: auto; height: 32px; min-height: 30px; padding: 3px 8px; font-size: .82rem; }
 
 /* Ambiente de teste: faixa laranja fixa no topo */
 .faixa-teste { position: sticky; top: 0; z-index: 30; margin: -26px calc(-1 * clamp(20px, 2.2vw, 40px)) 18px; padding: 8px 16px; text-align: center;
@@ -415,7 +417,7 @@ th.num .th-ordem { justify-content: flex-end; }
 @media (max-width: 420px) { .periodo-datas { flex-wrap: wrap; } }
 
 /* Nova TPE: filtros da lista de predecessoras */
-.filtro-pred { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 4px; }
+.filtro-pred { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .filtro-pred label { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; color: var(--cinza-600); cursor: pointer; font-weight: 500; }
 .filtro-pred input[type='checkbox'] { width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--azul); }
 
@@ -511,3 +513,22 @@ section.card h3 { font-size: .92rem; margin: 6px 0 10px; color: var(--grafite-90
 .busca-os-lista li.vazio { display: block; color: var(--cinza-600); cursor: default; }
 .busca-os-lista mark { background: #fde68a; color: inherit; border-radius: 2px; padding: 0 1px; }
 @media print { .ios-entregas-col { max-height: none; } }
+
+/* Calendário: prazo final das O.S., número do dia clicável e resumo flutuante */
+.cal-os { font-size: .64rem; font-weight: 600; color: var(--cinza-600); background: #fff; border: 1px dashed var(--cinza-500); border-radius: 99px; padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: flex-start; cursor: help; }
+.cal-num-btn { all: unset; cursor: pointer; font-size: .8rem; font-weight: 600; color: var(--grafite-900); min-width: 26px; height: 26px; display: inline-grid; place-items: center; border-radius: 99px; padding: 0 4px; }
+.cal-num-btn:hover, .cal-num-btn:focus-visible { background: var(--cinza-100); outline: none; }
+.cal-num-btn.ativo { box-shadow: 0 0 0 2px var(--azul); }
+.cal-dia.hoje .cal-num-btn { background: var(--azul); color: #fff; }
+.cal-dia.fora .cal-num-btn { color: var(--cinza-500); }
+.cal-balao { position: absolute; z-index: 60; width: 380px; max-width: calc(100% - 16px); max-height: 440px; overflow: auto; background: #fff; border: 1px solid var(--cinza-200);
+  border-radius: 12px; box-shadow: 0 16px 40px rgba(16, 24, 40, .22); padding: 12px 14px; display: grid; gap: 8px; animation: cal-balao-in .12s ease-out; }
+@keyframes cal-balao-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.cal-balao-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.cal-balao-tot { font-size: .88rem; }
+.cal-balao-proj { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .8rem; }
+.cal-balao-proj > span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-balao-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cal-balao-lista li { border-left: 3px solid; padding: 4px 0 4px 9px; display: grid; gap: 2px; }
+.cal-balao-lista .lin1 { display: flex; align-items: baseline; gap: 6px; font-size: .85rem; }
+.cal-balao-lista .dur { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }

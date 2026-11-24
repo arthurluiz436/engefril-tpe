@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { dataBR, hm, hojeISO, osBR, somaDias } from '../lib/formato'
 import { corRecurso, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 import { Dialogo, Icone } from './ui'
@@ -22,6 +22,8 @@ interface Props {
   carregando?: boolean
   /** férias e ausências da equipe */
   ausencias?: Ausencia[]
+  /** prazo final de cada O.S. (número → data), marcado no dia */
+  prazosOS?: Map<number, string>
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -41,10 +43,35 @@ export function gradeDoMes(mes: string): [string, string] {
 const moverMes = (mes: string, n: number) => { const [a, m] = mes.split('-').map(Number); return new Date(Date.UTC(a, m - 1 + n, 1)).toISOString().slice(0, 7) }
 const hora = (h: string) => { const [a, b] = h.slice(0, 5).split(':'); return b === '00' ? `${Number(a)}h` : `${Number(a)}h${b}` }
 
-export default function Calendario({ entradas, tpes, recursos, dias = [], mes, aoMudarMes, carregando, ausencias = [] }: Props) {
+export default function Calendario({ entradas, tpes, recursos, dias = [], mes, aoMudarMes, carregando, ausencias = [], prazosOS }: Props) {
   const hoje = hojeISO()
   const [ocultos, setOcultos] = useState<Set<string>>(new Set())
   const [aberto, setAberto] = useState<string | null>(null)
+  // resumo flutuante do dia (abre ao clicar no número do dia)
+  const [resumo, setResumo] = useState<{ d: string; x: number; y: number } | null>(null)
+  const caixaRef = useRef<HTMLDivElement>(null)
+  const balaoRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!resumo) return
+    const fora = (e: MouseEvent) => { if (balaoRef.current && !balaoRef.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('.cal-num-btn')) setResumo(null) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setResumo(null) }
+    document.addEventListener('mousedown', fora); document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc) }
+  }, [resumo])
+  // prazos finais das O.S. por dia (e o cliente de cada O.S., pelas TPEs)
+  const clienteOS = useMemo(() => new Map(tpes.map((t: any) => [Number(t.os), t.cliente as string])), [tpes])
+  const prazosDia = useMemo(() => {
+    const m = new Map<string, number[]>()
+    for (const [os, d] of prazosOS ?? []) { const k = String(d).slice(0, 10); m.set(k, [...(m.get(k) ?? []), os]) }
+    return m
+  }, [prazosOS])
+  const abrirResumo = (d: string, el: HTMLElement) => {
+    if (resumo?.d === d) return setResumo(null)
+    const c = caixaRef.current!.getBoundingClientRect(), r = el.getBoundingClientRect()
+    const larg = 380
+    const x = Math.min(Math.max(8, r.left - c.left), c.width - larg - 8)
+    setResumo({ d, x, y: r.bottom - c.top + 6 })
+  }
   const [ini, fim] = gradeDoMes(mes)
   const cor = useMemo(() => new Map(recursos.map((r: any, i: number) => [String(r.id), corRecurso(r, i)])), [recursos])
   const nome = useMemo(() => new Map(recursos.map((r: any) => [String(r.id), r.nome as string])), [recursos])
@@ -92,9 +119,8 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
   const listaAberta = aberto ? porDia.get(aberto) ?? [] : []
 
   return (
-    <div className="calendario">
+    <div className="calendario" ref={caixaRef} style={{ position: 'relative' }}>
       <div className="cal-topo">
-        <button className="btn sec" onClick={() => aoMudarMes(hoje.slice(0, 7))}>Hoje</button>
         <button className="btn fantasma pequeno" onClick={() => aoMudarMes(moverMes(mes, -1))} aria-label="Mês anterior"><span style={{ transform: 'rotate(-90deg)', display: 'inline-flex' }}><Icone n="cima" /></span></button>
         <button className="btn fantasma pequeno" onClick={() => aoMudarMes(moverMes(mes, 1))} aria-label="Próximo mês"><span style={{ transform: 'rotate(90deg)', display: 'inline-flex' }}><Icone n="cima" /></span></button>
         <h2 style={{ margin: 0, fontWeight: 600 }}>{MESES[mM - 1]} de {aM}</h2>
@@ -122,10 +148,11 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
           return (
             <div key={d} role="gridcell" className={`cal-dia ${foraDoMes ? 'fora' : ''} ${semExpediente && esp?.tipo !== 'DIA_NORMAL' ? 'folga' : ''} ${d === hoje ? 'hoje' : ''}`}>
               <div className="cal-num">
-                <span className="n">{d.endsWith('-01') ? `${Number(d.slice(8))} ${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(d.slice(5, 7)) - 1]}.` : Number(d.slice(8))}</span>
+                <button type="button" className={`n cal-num-btn ${resumo?.d === d ? 'ativo' : ''}`} onClick={(ev) => abrirResumo(d, ev.currentTarget)} title="Ver o resumo do dia" aria-haspopup="dialog">{d.endsWith('-01') ? `${Number(d.slice(8))} ${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(d.slice(5, 7)) - 1]}.` : Number(d.slice(8))}</button>
                 {total > 0 && <span className="cal-total" title="Horas apontadas no dia (projetistas visíveis)">{hm(total)}</span>}
               </div>
               {esp && <div className={`cal-esp ${esp.tipo ?? 'FERIADO'}`} title={esp.descricao}>{ROT_DIA[esp.tipo ?? 'FERIADO']}: {esp.descricao}</div>}
+              {(prazosDia.get(d) ?? []).map((os) => <div key={`os${os}`} className="cal-os" title={`Prazo final da O.S. ${osBR(os)}${clienteOS.get(os) ? ` · ${clienteOS.get(os)}` : ''}: ${dataBR(d)}`}>OS {osBR(os)}</div>)}
               {ausencias.filter((a) => !ocultos.has(String(a.recurso_id)) && String(a.inicio).slice(0, 10) <= d && String(a.fim).slice(0, 10) >= d && w !== 0 && w !== 6).map((a, k) => (
                 <div key={`a${k}`} className="cal-ferias" style={{ borderLeftColor: cor.get(String(a.recurso_id)) }} title={`${ROTULO_AUSENCIA[a.tipo ?? "FERIAS"] ?? "Férias"} de ${nome.get(String(a.recurso_id)) ?? ""}: ${dataBR(a.inicio)} a ${dataBR(a.fim)}`}>{ROTULO_AUSENCIA[a.tipo ?? "FERIAS"] ?? "Férias"} · {(nome.get(String(a.recurso_id)) ?? "").split(" ")[0]}</div>))}
               {lista.slice(0, lista.length > MAX_NO_DIA ? MAX_NO_DIA - 1 : MAX_NO_DIA).map(item)}
@@ -133,6 +160,9 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
             </div>)
         })}
       </div>
+      {resumo && <ResumoDia d={resumo.d} pos={resumo} refEl={balaoRef} lista={porDia.get(resumo.d) ?? []} esp={diaEsp.get(resumo.d)}
+        ferias={ausencias.filter((a) => String(a.inicio).slice(0, 10) <= resumo.d && String(a.fim).slice(0, 10) >= resumo.d)} prazos={prazosDia.get(resumo.d) ?? []}
+        clienteOS={clienteOS} tpe={tpe} cor={cor} nome={nome} aoFechar={() => setResumo(null)} />}
       <Dialogo titulo={aberto ? `Apontamentos de ${dataBR(aberto)}` : ''} aberto={!!aberto} aoFechar={() => setAberto(null)}>
         <div className="stack" style={{ gap: 6 }}>
           {listaAberta.map((e) => (
@@ -147,4 +177,47 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
       </Dialogo>
     </div>
   )
+}
+
+/** Balão flutuante com o resumo do dia: horas por projetista, apontamentos e o que foi feito. */
+function ResumoDia({ d, pos, refEl, lista, esp, ferias, prazos, clienteOS, tpe, cor, nome, aoFechar }: {
+  d: string; pos: { x: number; y: number }; refEl: RefObject<HTMLDivElement>; lista: EntradaCal[]; esp: any; ferias: Ausencia[]; prazos: number[]
+  clienteOS: Map<number, string>; tpe: Map<any, any>; cor: Map<string, string>; nome: Map<string, string>; aoFechar: () => void
+}) {
+  const total = lista.reduce((s, e) => s + Number(e.horas_totais), 0)
+  const extras = lista.reduce((s, e) => s + Number(e.horas_extras), 0)
+  const porProj = new Map<string, number>()
+  for (const e of lista) porProj.set(String(e.recurso_id), (porProj.get(String(e.recurso_id)) ?? 0) + Number(e.horas_totais))
+  const sem = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'][new Date(`${d}T12:00:00Z`).getUTCDay()]
+  return (
+    <div ref={refEl} className="cal-balao" role="dialog" aria-label={`Resumo de ${dataBR(d)}`} style={{ left: pos.x, top: pos.y }}>
+      <div className="cal-balao-topo">
+        <div><strong>{dataBR(d)}</strong> <span className="muted small">{sem}</span></div>
+        <button type="button" className="btn fantasma pequeno" onClick={aoFechar} aria-label="Fechar"><Icone n="fechar" /></button>
+      </div>
+      {esp && <div className={`cal-esp ${esp.tipo ?? 'FERIADO'}`}>{ROT_DIA[esp.tipo ?? 'FERIADO']}: {esp.descricao}</div>}
+      {ferias.map((a, k) => <div key={k} className="cal-ferias" style={{ borderLeftColor: cor.get(String(a.recurso_id)) }}>{ROTULO_AUSENCIA[a.tipo ?? 'FERIAS'] ?? 'Férias'} · {nome.get(String(a.recurso_id))}</div>)}
+      {prazos.map((os) => <div key={os} className="cal-os">Prazo final: OS {osBR(os)}{clienteOS.get(os) ? ` · ${clienteOS.get(os)}` : ''}</div>)}
+      {lista.length === 0 ? <p className="muted small" style={{ margin: '6px 0 0' }}>Nenhum apontamento neste dia.</p> : (
+        <>
+          <div className="cal-balao-tot">
+            <span><strong>{hm(total)}</strong> em {lista.length} apontamento(s){extras > 0.0001 ? <> · <span className="ind-he">{hm(extras)} extra</span></> : null}</span>
+          </div>
+          <div className="cal-balao-proj">
+            {[...porProj.entries()].sort((a, b) => b[1] - a[1]).map(([id, h]) => (
+              <span key={id}><span className="cal-ponto" style={{ background: cor.get(id) ?? '#6b7079' }} />{nome.get(id) ?? '—'} <strong>{hm(h)}</strong></span>))}
+          </div>
+          <ul className="cal-balao-lista">
+            {lista.map((e) => {
+              const t: any = tpe.get(e.tpe_id)
+              return (
+                <li key={e.id} style={{ borderLeftColor: cor.get(String(e.recurso_id)) ?? '#6b7079' }}>
+                  <div className="lin1"><span className="mono">{e.hora_inicio.slice(0, 5)}–{e.hora_fim.slice(0, 5)}</span> <strong>{e.tpe_codigo}</strong>{t?.os != null && <span className="muted small"> · OS {osBR(t.os)}</span>}<span className="dur">{hm(Number(e.horas_totais))}</span></div>
+                  <div className="small muted">{e.recurso_nome ?? nome.get(String(e.recurso_id))}{e.grupo ? ` · ${e.grupo}` : ''}</div>
+                  <div className="small">{e.descricao ? e.descricao : <span className="muted">{t?.descricao ? `TPE: ${t.descricao}` : 'Sem descrição.'}</span>}</div>
+                </li>)
+            })}
+          </ul>
+        </>)}
+    </div>)
 }

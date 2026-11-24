@@ -287,16 +287,8 @@ export default function Tpes() {
                   <select value={ed.responsavel_id} onChange={(e) => setEd(comResponsavel(ed, e.target.value))}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id} style={{ color: corResp.get(String(r.id)) }}>● {r.nome}</option>)}</select>
                 </div></Campo>
               <div className="campo">
-                <span id="rot-pred">Predecessora</span>
-                <span className="ajuda">Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.</span>
-                <div className="filtro-pred" role="group" aria-label="Filtrar a lista de predecessoras">
-                  <label title={ed.os ? `Só TPEs da O.S. ${osBR(ed.os)}` : 'Escolha a O.S. primeiro'}>
-                    <input type="checkbox" checked={predMesmaOS} disabled={!ed.os} onChange={(e) => setPredMesmaOS(e.target.checked)} /> Só desta O.S.
-                  </label>
-                  <label title="Só TPEs com status NÃO INICIADA">
-                    <input type="checkbox" checked={predNaoIniciadas} onChange={(e) => setPredNaoIniciadas(e.target.checked)} /> Só não iniciadas
-                  </label>
-                </div>
+                <span id="rot-pred" className="rotulo">Predecessora</span>
+                
                 {(() => {
                   const lista = opcoesPred.filter((t: any) => String(t.id) === String(ed.predecessora_id)
                     || ((!predMesmaOS || !ed.os || String(t.os) === String(ed.os)) && (!predNaoIniciadas || t.status === 'NÃO INICIADA')))
@@ -305,7 +297,16 @@ export default function Tpes() {
                       <option value="">{lista.length ? 'Nenhuma' : 'Nenhuma (nenhuma TPE com esses filtros)'}</option>
                       {lista.map((t: any) => <option key={t.id} value={t.id}>{t.codigo} · {t.grupo}{t.responsavel ? ` · ${t.responsavel}` : ''} · {t.status.toLowerCase()}</option>)}
                     </select>)
-                })()}</div>
+                })()}
+                <div className="filtro-pred" role="group" aria-label="Filtrar a lista de predecessoras">
+                  <label title={ed.os ? `Só TPEs da O.S. ${osBR(ed.os)}` : 'Escolha a O.S. primeiro'}>
+                    <input type="checkbox" checked={predMesmaOS} disabled={!ed.os} onChange={(e) => setPredMesmaOS(e.target.checked)} /> Só desta O.S.
+                  </label>
+                  <label title="Só TPEs com status NÃO INICIADA">
+                    <input type="checkbox" checked={predNaoIniciadas} onChange={(e) => setPredNaoIniciadas(e.target.checked)} /> Só não iniciadas
+                  </label>
+                </div>
+                <span className="ajuda">Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.</span></div>
             </div>
             {disp && (() => {
               const nome = base.recursos.find((r: any) => String(r.id) === String(ed.responsavel_id))?.nome ?? ''

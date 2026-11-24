@@ -78,10 +78,10 @@ export function Vazio({ children }: { children: ReactNode }) {
 export function Campo({ rotulo, ajuda, erro, children }: { rotulo: string; ajuda?: ReactNode; erro?: string | null; children: ReactNode }) {
   return (
     <label className="campo">
-      <span>{rotulo}</span>
-      {ajuda && <span className="ajuda">{ajuda}</span>}
+      <span className="rotulo">{rotulo}</span>
       {children}
       {erro && <span className="erro-campo">{erro}</span>}
+      {ajuda && <span className="ajuda">{ajuda}</span>}
     </label>
   )
 }
