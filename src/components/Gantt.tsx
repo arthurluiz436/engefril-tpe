@@ -59,7 +59,6 @@ interface Pista { id: string; nome: string; cor: string; abertas: any[]; conclui
 export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
     mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS, arrastar } = p
-  const ROT = p.rotulo ?? 310
   const rotRef = useRef<HTMLDivElement>(null)
   // arrastar para reordenar: { id da TPE, posição de origem e destino na fila, y do ponteiro }
   const [arr, setArr] = useState<{ id: number; de: number; para: number; y0: number; ativo: boolean } | null>(null)
@@ -157,6 +156,23 @@ export default function Gantt(p: GanttProps) {
     }
     return { meses, marcas, naoUteis, semanas }
   }, [ini, dias, dx, feriados])
+
+  // largura da coluna de nomes pelo conteúdo: código + O.S. + etiqueta da predecessora (sem sobrar nem cortar)
+  const rotAuto = useMemo(() => {
+    let w = 200
+    for (const l of linhas) {
+      if (l.tipo !== 'tarefa') continue
+      const t = l.t, pred = t.predecessora_id ? porId.get(t.predecessora_id) : null
+      const dono = pred ? (donoDe.get(pred.id)?.id ?? String(pred.responsavel_id)) : null
+      const outro = !!pred && dono !== l.pista.id
+      const cw = 20 + 22 + 8 + String(t.codigo).length * 7.6 + 8 + 78
+        + (outro ? 8 + String(pred.codigo).replace('TPE-', '').length * 6.4 + 22 : 0)
+        + (arrastar && !l.feita && l.pista.id === arrastar.recurso ? 16 : 0)
+      if (cw > w) w = cw
+    }
+    return Math.min(360, Math.ceil(w))
+  }, [linhas, porId, donoDe, arrastar?.recurso]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ROT = p.rotulo ?? rotAuto
 
   // linhas arrastáveis: só as TPEs em aberto do projetista escolhido
   const filaArr = arrastar ? linhas.filter((l): l is Extract<Linha, { tipo: 'tarefa' }> => l.tipo === 'tarefa' && !l.feita && l.pista.id === arrastar.recurso) : []

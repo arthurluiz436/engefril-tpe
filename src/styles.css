@@ -538,7 +538,7 @@ section.card h3 { font-size: .92rem; margin: 6px 0 10px; color: var(--grafite-90
 
 /* Cronograma: rótulos sem sobreposição e arrastar para reordenar (Sequência) */
 .g2-rot-tarefa { overflow: hidden; }
-.g2-rot-tarefa .g2-passa { margin-left: auto; }
+.g2-rot-tarefa .g2-passa { margin-left: 0; }
 .g2-rot-tarefa.arrastavel, .g2-tarefa.arrastavel { cursor: grab; touch-action: none; }
 .g2-rot-tarefa.arrastavel:hover { background: #eef3fb; }
 .g2-rot-tarefa.arrastando, .g2-tarefa.arrastando { opacity: .45; }

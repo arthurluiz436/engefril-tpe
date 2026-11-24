@@ -107,7 +107,7 @@ export default function Cronograma() {
               <span className="g2-ponto" style={{ background: corRecurso(r, i) }} />{r.nome}</button>))}
         </div>
         <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} somente={visiveis} diasAntes={diasAntes} pxDia={ZOOM[zoom].px} ausencias={base.ausencias} prazosOS={prazosDasOS(base.os)}
-          mostrarConcluidas={concluidas} mostrarSetas={setas} mostrarCarga={carga} filtroOS={os ? Number(os) : null} rotulo={190}
+          mostrarConcluidas={concluidas} mostrarSetas={setas} mostrarCarga={carga} filtroOS={os ? Number(os) : null}
           selecionada={sel?.id ?? null} aoSelecionar={(t) => setSel(sel?.id === t.id ? null : t)} />
       </div>
 
