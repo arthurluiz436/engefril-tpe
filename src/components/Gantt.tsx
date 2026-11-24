@@ -59,7 +59,7 @@ interface Pista { id: string; nome: string; cor: string; abertas: any[]; conclui
 export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
     mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS, arrastar } = p
-  const ROT = p.rotulo ?? 300
+  const ROT = p.rotulo ?? 310
   const rotRef = useRef<HTMLDivElement>(null)
   // arrastar para reordenar: { id da TPE, posição de origem e destino na fila, y do ponteiro }
   const [arr, setArr] = useState<{ id: number; de: number; para: number; y0: number; ativo: boolean } | null>(null)
