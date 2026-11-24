@@ -17,6 +17,7 @@ const MENU_MASTER: { grupo: string; itens: { to: string; n: string; t: string }[
   { grupo: 'Acompanhamento', itens: [
     { to: '/master', n: 'painel', t: 'Painel' },
     { to: '/master/indicadores', n: 'grafico', t: 'Indicadores' },
+    { to: '/master/os-indicadores', n: 'alvo', t: 'Indicadores por Cliente/O.S.' },
     { to: '/master/dados', n: 'dados', t: 'Central de Dados' },
   ] },
   { grupo: 'Planejamento', itens: [

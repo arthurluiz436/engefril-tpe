@@ -18,6 +18,7 @@ const CalendarioSupervisor = lazy(() => import('./pages/comum/CalendarioEquipe')
 // telas do Master carregadas sob demanda (o projetista não baixa esse código)
 const Painel = lazy(() => import('./pages/master/Painel'))
 const Indicadores = lazy(() => import('./pages/master/Indicadores'))
+const IndicadoresOS = lazy(() => import('./pages/master/IndicadoresOS'))
 const CentralDados = lazy(() => import('./pages/master/CentralDados'))
 const Tpes = lazy(() => import('./pages/master/Tpes'))
 const Sequencias = lazy(() => import('./pages/master/Sequencias'))
@@ -59,6 +60,7 @@ function Rotas() {
           <Route path="/master/*" element={<SoMaster><Routes>
             <Route index element={<Painel />} />
             <Route path="indicadores" element={<Indicadores />} />
+            <Route path="os-indicadores" element={<IndicadoresOS />} />
             <Route path="dados" element={<CentralDados />} />
             <Route path="tpes" element={<Tpes />} />
             <Route path="sequencias" element={<Sequencias />} />

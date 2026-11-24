@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { linhasDe } from '../../lib/conjuntos'
@@ -39,17 +40,42 @@ export default function OrdensServico() {
   const atrasada = (o: any) => o.status !== 'FINALIZADA' && !!o.prazo_final && String(o.prazo_final).slice(0, 10) < hoje
   /** O.S. em aberto com TPEs e nenhuma pendente ou em andamento: pode ser finalizada */
   const apta = (o: any) => o.status !== 'FINALIZADA' && Number(o.qtd_tpes) > 0 && Number(o.tpes_abertas) === 0
-  // data do apontamento mais recente de cada O.S.
-  const ultimoAp = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const a of base?.aps ?? []) { const d = String(a.dia).slice(0, 10); const o = Number(a.os); if (!m.has(o) || d > m.get(o)!) m.set(o, d) }
-    return m
+  // primeiro e último apontamento de cada O.S.
+  const { primeiroAp, ultimoAp } = useMemo(() => {
+    const ini = new Map<number, string>(), fim = new Map<number, string>()
+    for (const a of base?.aps ?? []) {
+      const d = String(a.dia).slice(0, 10); const o = Number(a.os)
+      if (!ini.has(o) || d < ini.get(o)!) ini.set(o, d)
+      if (!fim.has(o) || d > fim.get(o)!) fim.set(o, d)
+    }
+    return { primeiroAp: ini, ultimoAp: fim }
   }, [base])
+  // filtros por coluna e ordenação (clique no título: menor → maior, de novo: maior → menor)
+  const [fCliente, setFCliente] = useState('')
+  const [fNivel, setFNivel] = useState('')
+  const [fVendedor, setFVendedor] = useState('')
+  const [ord, setOrd] = useState<{ k: string; dir: 1 | -1 } | null>(null)
+  const VALOR: Record<string, (o: any) => any> = {
+    os: (o) => o.os, cliente: (o) => String(o.nome ?? '').toLowerCase(), nivel: (o) => String(o.nivel ?? '').toLowerCase() || null,
+    vendedor: (o) => String(o.vendedor ?? '').toLowerCase() || null, inicio: (o) => o.data_inicio ? String(o.data_inicio).slice(0, 10) : null,
+    prazo: (o) => o.prazo_final ? String(o.prazo_final).slice(0, 10) : null, status: (o) => o.status, fin: (o) => o.data_finalizacao ? String(o.data_finalizacao).slice(0, 10) : null,
+    tpes: (o) => Number(o.qtd_tpes), datas: (o) => ultimoAp.get(o.os) ?? null, horas: (o) => Number(o.horas), custo: (o) => Number(o.custo),
+  }
+  const Th = ({ k, children, num, title }: { k: string; children: ReactNode; num?: boolean; title?: string }) => {
+    const ativo = ord?.k === k
+    return (
+      <th className={num ? 'num' : ''} title={title} aria-sort={ativo ? (ord!.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+        <button type="button" className={`th-ordem ${ativo ? 'ativo' : ''}`} onClick={() => setOrd({ k, dir: ativo && ord!.dir === 1 ? -1 : 1 })}>
+          {children}<span className="seta-ordem" aria-hidden="true">{ativo ? (ord!.dir === 1 ? '▲' : '▼') : '↕'}</span>
+        </button>
+      </th>)
+  }
   const { linhas, contagem, resumoFin } = useMemo(() => {
     const vazio = { linhas: [], contagem: { abertas: 0, atrasadas: 0, aptas: 0, finalizadas: 0, todas: 0 }, resumoFin: { prazo: 0, antes: 0, atrasada: 0 } }
     if (!base) return vazio
     const b = busca.toLowerCase()
-    const todas = linhasDe('os', base).filter((o: any) => o.arquivada !== 'SIM' && (!b || `${o.os} ${osBR(o.os)} ${o.nome} ${o.cidade} ${o.vendedor}`.toLowerCase().includes(b)))
+    const todas = linhasDe('os', base).filter((o: any) => o.arquivada !== 'SIM' && (!b || `${o.os} ${osBR(o.os)} ${o.nome} ${o.cidade} ${o.vendedor}`.toLowerCase().includes(b))
+      && (!fCliente || o.nome === fCliente) && (!fNivel || (o.nivel ?? '') === fNivel) && (!fVendedor || (o.vendedor ?? '') === fVendedor))
     const contagem = { abertas: todas.filter((o: any) => o.status !== 'FINALIZADA').length, atrasadas: todas.filter(atrasada).length, aptas: todas.filter(apta).length,
       finalizadas: todas.filter((o: any) => o.status === 'FINALIZADA').length, todas: todas.length }
     const resumoFin = { prazo: 0, antes: 0, atrasada: 0 }
@@ -57,9 +83,21 @@ export default function OrdensServico() {
     const linhas = todas
       .filter((o: any) => filtro === 'todas' || (filtro === 'finalizadas' ? o.status === 'FINALIZADA' : filtro === 'atrasadas' ? atrasada(o) : filtro === 'aptas' ? apta(o) : o.status !== 'FINALIZADA'))
       // atrasadas primeiro (a mais vencida no topo), depois pela O.S. mais recente
-      .sort((a: any, z: any) => Number(atrasada(z)) - Number(atrasada(a)) || (atrasada(a) ? String(a.prazo_final).localeCompare(String(z.prazo_final)) : 0) || z.os - a.os)
+      .sort((a: any, z: any) => {
+        if (ord) {
+          const va = VALOR[ord.k](a), vz = VALOR[ord.k](z)
+          if (va == null || vz == null) return va == null && vz == null ? 0 : va == null ? 1 : -1 // vazios no fim
+          return (va < vz ? -1 : va > vz ? 1 : 0) * ord.dir || z.os - a.os
+        }
+        return Number(atrasada(z)) - Number(atrasada(a)) || (atrasada(a) ? String(a.prazo_final).localeCompare(String(z.prazo_final)) : 0) || z.os - a.os
+      })
     return { linhas, contagem, resumoFin }
-  }, [base, busca, filtro]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, busca, filtro, fCliente, fNivel, fVendedor, ord, ultimoAp]) // eslint-disable-line react-hooks/exhaustive-deps
+  const opcoes = useMemo(() => {
+    const os = (base?.os ?? []).filter((o: any) => !o.arquivada)
+    const uniq = (f: (o: any) => any) => [...new Set(os.map(f).filter(Boolean))].sort() as string[]
+    return { clientes: uniq((o) => o.nome), niveis: uniq((o) => o.nivel), vendedores: uniq((o) => o.vendedor) }
+  }, [base])
 
   const erros = ed ? {
     os: !ed.os || Number(ed.os) < 0 ? 'Informe o número.' : ed.novo && base?.os.some((o: any) => o.os === Number(ed.os)) ? 'O.S. já cadastrada.' : null,
@@ -114,6 +152,12 @@ export default function OrdensServico() {
         acoes={<button className="btn" onClick={() => setEd({ novo: true, os: '', nome: '', status: 'EM ANDAMENTO', data_inicio: hojeISO() })}><Icone n="mais" /> Nova O.S.</button>} />
       <div className="row nao-imprimir">
         <input type="search" placeholder="Buscar O.S., cliente, cidade, vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 380 }} aria-label="Buscar" />
+        <select value={fCliente} onChange={(e) => setFCliente(e.target.value)} aria-label="Cliente" style={{ maxWidth: 220 }}><option value="">Todos os clientes</option>{opcoes.clientes.map((x) => <option key={x}>{x}</option>)}</select>
+        <select value={fNivel} onChange={(e) => setFNivel(e.target.value)} aria-label="Nível" style={{ maxWidth: 160 }}><option value="">Todos os níveis</option>{opcoes.niveis.map((x) => <option key={x}>{x}</option>)}</select>
+        <select value={fVendedor} onChange={(e) => setFVendedor(e.target.value)} aria-label="Vendedor" style={{ maxWidth: 180 }}><option value="">Todos os vendedores</option>{opcoes.vendedores.map((x) => <option key={x}>{x}</option>)}</select>
+        {(fCliente || fNivel || fVendedor || ord) && <a href="#" className="small" onClick={(e) => { e.preventDefault(); setFCliente(''); setFNivel(''); setFVendedor(''); setOrd(null) }}>Limpar filtros e ordem</a>}
+      </div>
+      <div className="row nao-imprimir">
         <div className="segmentos" role="group" aria-label="Filtrar O.S.">
           {([['abertas', 'Em aberto'], ['atrasadas', 'Atrasadas'], ['aptas', 'Prontas p/ finalizar'], ['finalizadas', 'Finalizadas'], ['todas', 'Todas']] as const).map(([k, r]) => (
             <button key={k} type="button" aria-pressed={filtro === k} className={k === 'atrasadas' && contagem.atrasadas ? 'tem-atraso' : k === 'aptas' && contagem.aptas ? 'tem-apta' : ''} onClick={() => setFiltro(k)}>
@@ -137,21 +181,22 @@ export default function OrdensServico() {
           <span className="muted">Entregas:</span>
           <span className="badge verde">{resumoFin.prazo} no prazo</span><span className="badge azul">{resumoFin.antes} antes do prazo</span><span className="badge vermelho">{resumoFin.atrasada} atrasadas</span>
         </div>)}
-      <div className="rolagem"><table className="tabela"><thead><tr><th>O.S.</th><th>Cliente · local</th><th>Nível · classificação</th><th>Vendedor</th><th>Prazo final</th><th>Status</th><th>Finalização</th><th className="num">TPEs (abertas)</th><th title="Data do registro de trabalho mais recente em alguma TPE da O.S.">Último apont.</th><th className="num">Horas</th><th className="num">Custo</th><th></th></tr></thead>
-        <tbody>{linhas.length === 0 && <tr><td colSpan={12} className="vazio">Nenhuma O.S. {({ abertas: 'em aberto', atrasadas: 'atrasada', aptas: 'pronta para finalizar', finalizadas: 'finalizada', todas: '' } as Record<string, string>)[filtro]} {busca ? 'para esta busca' : ''}.</td></tr>}
+      <div className="rolagem"><table className="tabela"><thead><tr><Th k="os">O.S.</Th><Th k="cliente">Cliente · local</Th><Th k="nivel">Nível · classificação</Th><Th k="vendedor">Vendedor</Th><Th k="inicio" title="Data de início informada no cadastro da O.S.">Início</Th><Th k="prazo">Prazo final</Th><Th k="status">Status</Th><Th k="fin">Finalização</Th><Th k="tpes" num>TPEs (abertas)</Th><Th k="datas" title="Do primeiro ao último apontamento em TPEs da O.S. (ordena pelo último)">Datas apontadas</Th><Th k="horas" num>Horas</Th><Th k="custo" num>Custo</Th><th></th></tr></thead>
+        <tbody>{linhas.length === 0 && <tr><td colSpan={13} className="vazio">Nenhuma O.S. {({ abertas: 'em aberto', atrasadas: 'atrasada', aptas: 'pronta para finalizar', finalizadas: 'finalizada', todas: '' } as Record<string, string>)[filtro]} {busca ? 'para esta busca' : ''}.</td></tr>}
           {linhas.map((o: any) => {
             const p = parecerOS(o)
             return (
               <tr key={o.os} className={atrasada(o) ? 'linha-atraso' : ''}>
-                <td className="sem-quebra"><strong>{osBR(o.os)}</strong>{o.tipo === 'INTERNA' && <div><span className="badge">interna</span></div>}</td>
+                <td className="sem-quebra"><Link to={`/master/os-indicadores?os=${o.os}`} title="Ver os indicadores desta O.S."><strong>{osBR(o.os)}</strong></Link>{o.tipo === 'INTERNA' && <div><span className="badge">interna</span></div>}</td>
                 <td>{o.nome}<div className="small muted">{o.cidade}{o.uf ? `/${o.uf}` : ''}</div></td>
                 <td className="small">{o.nivel}{o.classificacao && <div className="muted">{o.classificacao}</div>}</td>
                 <td className="small">{o.vendedor}</td>
+                <td className="sem-quebra">{o.data_inicio ? dataBR(o.data_inicio) : <span className="muted">—</span>}</td>
                 <td className="sem-quebra">{dataBR(o.prazo_final)}{o.status !== 'FINALIZADA' && o.prazo_final && <div><SeloPrazo prazo={o.prazo_final} status={o.status} /></div>}</td>
                 <td><Selo v={o.status} /></td>
                 <td className="sem-quebra">{p ? <>{o.data_finalizacao ? dataBR(o.data_finalizacao) : '—'}<div><span className={`badge ${p.cor}`}>{p.rot}</span></div></> : <span className="muted">—</span>}</td>
                 <td className="num">{o.qtd_tpes} ({o.tpes_abertas})</td>
-                <td className="sem-quebra small">{ultimoAp.get(o.os) ? <>{dataBR(ultimoAp.get(o.os))}<div className="muted">{diasEntre(ultimoAp.get(o.os)!, hoje) === 0 ? 'hoje' : `há ${diasEntre(ultimoAp.get(o.os)!, hoje)} dia(s)`}</div></> : <span className="muted">—</span>}</td>
+                <td className="sem-quebra small">{ultimoAp.get(o.os) ? <>{dataBR(primeiroAp.get(o.os))} – {dataBR(ultimoAp.get(o.os))}<div className="muted">último {diasEntre(ultimoAp.get(o.os)!, hoje) === 0 ? 'hoje' : `há ${diasEntre(ultimoAp.get(o.os)!, hoje)} dia(s)`}</div></> : <span className="muted">—</span>}</td>
                 <td className="num">{h1(o.horas)}</td><td className="num">{reais0(o.custo)}</td>
                 <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
                   <button className="btn sec pequeno" onClick={() => setEd({ ...o, data_inicio: o.data_inicio ?? '', prazo_final: o.prazo_final ?? '', data_finalizacao: o.data_finalizacao ?? '' })}>Editar</button>

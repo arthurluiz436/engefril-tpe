@@ -33,6 +33,7 @@ const P: Record<string, string> = {
   arquivo: 'M3 7h18v13H3zM3 7l2-4h14l2 4M10 12h4',
   calendario: 'M4 5h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M16 14h.01M8 17h2M12 17h2',
   gantt: 'M3 4v16M7 7h8M10 12h9M7 17h6',
+  alvo: 'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zM12 12h.01',
 }
 export function Icone({ n, t = 18 }: { n: keyof typeof P | string; t?: number }) {
   return (

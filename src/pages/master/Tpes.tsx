@@ -134,6 +134,8 @@ export default function Tpes() {
   const porId = useMemo(() => new Map((base?.tpes ?? []).map((t: any) => [t.id, t])), [base])
   const pred: any = ed?.predecessora_id ? porId.get(Number(ed.predecessora_id)) : null
   // opções de predecessora: qualquer TPE existente, exceto ela mesma e as que já dependem dela (evita ciclo)
+  const [predMesmaOS, setPredMesmaOS] = useState(false)
+  const [predNaoIniciadas, setPredNaoIniciadas] = useState(false)
   const opcoesPred = useMemo(() => {
     if (!base || !ed) return []
     const bloqueadas = new Set<number>()
@@ -284,11 +286,26 @@ export default function Tpes() {
                   {ed.responsavel_id && <span className="g2-ponto" aria-hidden="true" />}
                   <select value={ed.responsavel_id} onChange={(e) => setEd(comResponsavel(ed, e.target.value))}><option value="">Sem responsável</option>{base.recursos.filter((r: any) => r.ativo).map((r: any) => <option key={r.id} value={r.id} style={{ color: corResp.get(String(r.id)) }}>● {r.nome}</option>)}</select>
                 </div></Campo>
-              <Campo rotulo="Predecessora" ajuda="Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.">
-                <select value={ed.predecessora_id} onChange={(e) => setEd({ ...ed, predecessora_id: e.target.value })}>
-                  <option value="">Nenhuma</option>
-                  {opcoesPred.map((t: any) => <option key={t.id} value={t.id}>{t.codigo} · {t.grupo}{t.responsavel ? ` · ${t.responsavel}` : ''} · {t.status.toLowerCase()}</option>)}
-                </select></Campo>
+              <div className="campo">
+                <span id="rot-pred">Predecessora</span>
+                <span className="ajuda">Opcional. Esta TPE só pode ser iniciada e apontada depois que a predecessora for iniciada.</span>
+                <div className="filtro-pred" role="group" aria-label="Filtrar a lista de predecessoras">
+                  <label title={ed.os ? `Só TPEs da O.S. ${osBR(ed.os)}` : 'Escolha a O.S. primeiro'}>
+                    <input type="checkbox" checked={predMesmaOS} disabled={!ed.os} onChange={(e) => setPredMesmaOS(e.target.checked)} /> Só desta O.S.
+                  </label>
+                  <label title="Só TPEs com status NÃO INICIADA">
+                    <input type="checkbox" checked={predNaoIniciadas} onChange={(e) => setPredNaoIniciadas(e.target.checked)} /> Só não iniciadas
+                  </label>
+                </div>
+                {(() => {
+                  const lista = opcoesPred.filter((t: any) => String(t.id) === String(ed.predecessora_id)
+                    || ((!predMesmaOS || !ed.os || String(t.os) === String(ed.os)) && (!predNaoIniciadas || t.status === 'NÃO INICIADA')))
+                  return (
+                    <select aria-labelledby="rot-pred" value={ed.predecessora_id} onChange={(e) => setEd({ ...ed, predecessora_id: e.target.value })}>
+                      <option value="">{lista.length ? 'Nenhuma' : 'Nenhuma (nenhuma TPE com esses filtros)'}</option>
+                      {lista.map((t: any) => <option key={t.id} value={t.id}>{t.codigo} · {t.grupo}{t.responsavel ? ` · ${t.responsavel}` : ''} · {t.status.toLowerCase()}</option>)}
+                    </select>)
+                })()}</div>
             </div>
             {disp && (() => {
               const nome = base.recursos.find((r: any) => String(r.id) === String(ed.responsavel_id))?.nome ?? ''

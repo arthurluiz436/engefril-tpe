@@ -62,10 +62,10 @@ export function SeletorPeriodo({ periodo, aoMudar, base }: { periodo: Periodo; a
       <div className="segmentos rolavel" role="group" aria-label="Atalhos de período">
         {ATALHOS.map(([k, r]) => <button key={k} type="button" aria-pressed={periodo.atalho === k} onClick={() => escolher(k)}>{r}</button>)}
       </div>
-      <div className="row" style={{ gap: 6 }}>
-        <input type="date" value={periodo.ini} max={periodo.fim} aria-label="Início do período" onChange={(e) => e.target.value && aoMudar({ atalho: 'personalizado', ini: e.target.value, fim: periodo.fim })} style={{ maxWidth: 160 }} />
+      <div className="periodo-datas">
+        <input type="date" value={periodo.ini} max={periodo.fim} aria-label="Início do período" onChange={(e) => e.target.value && aoMudar({ atalho: 'personalizado', ini: e.target.value, fim: periodo.fim })} />
         <span className="muted">até</span>
-        <input type="date" value={periodo.fim} min={periodo.ini} aria-label="Fim do período" onChange={(e) => e.target.value && aoMudar({ atalho: 'personalizado', ini: periodo.ini, fim: e.target.value })} style={{ maxWidth: 160 }} />
+        <input type="date" value={periodo.fim} min={periodo.ini} aria-label="Fim do período" onChange={(e) => e.target.value && aoMudar({ atalho: 'personalizado', ini: periodo.ini, fim: e.target.value })} />
         {periodo.atalho === 'personalizado' && <span className="badge azul">personalizado</span>}
       </div>
     </div>

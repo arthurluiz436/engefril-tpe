@@ -7,4 +7,6 @@ export default defineConfig({
   base: process.env.VITE_BASE_PATH ?? '/',
   plugins: [react()],
   build: { sourcemap: false, chunkSizeWarningLimit: 1200 },
+  // atalho "Abrir TESTE": a cópia local é atualizada por fora (robocopy); a varredura garante que o site recarregue
+  server: process.env.ENGEFRIL_POLLING ? { watch: { usePolling: true, interval: 800 } } : undefined,
 })
