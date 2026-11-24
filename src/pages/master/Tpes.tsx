@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
+import { useAuth } from '../../lib/auth'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { paraParametros, situacaoPrazo } from '../../lib/dados'
 import { horasPorDiaUtil } from '../../lib/calculo'
@@ -25,6 +26,7 @@ const iniciada = (t: any) => t && (t.status !== 'NÃO INICIADA' || Number(t.qtd_
 
 export default function Tpes() {
   const { base, recarregar } = useBase()
+  const { somenteLeitura } = useAuth()
   const avisar = useAvisar()
   const { confirmar, elemento } = useConfirmar()
   const [qs, setQs] = useSearchParams()
@@ -44,9 +46,9 @@ export default function Tpes() {
   useEffect(() => { supabase.from('catalogo_grupos').select('*').order('ordem').then(({ data }) => setCatalogo(data ?? [])) }, [])
   useEffect(() => {
     if (!base) return
-    if (qs.get('novo')) { novo(); qs.delete('novo'); setQs(qs) }
+    if (qs.get('novo')) { if (!somenteLeitura) novo(); qs.delete('novo'); setQs(qs) }
     const idEd = qs.get('editar')
-    if (idEd) { const t = linhasDe('tpes', base).find((x: any) => String(x.id) === idEd); if (t) editar(t); qs.delete('editar'); setQs(qs) }
+    if (idEd) { const t = linhasDe('tpes', base).find((x: any) => String(x.id) === idEd); if (t && !somenteLeitura) editar(t); qs.delete('editar'); setQs(qs) }
   }, [base]) // eslint-disable-line
 
   const { linhas, contagem } = useMemo(() => {
@@ -214,7 +216,7 @@ export default function Tpes() {
     <div className="stack">
       {elemento}
       <Cabecalho titulo="TPEs e tarefas" texto="Crie tarefas, defina responsável, predecessora, início e prazo. A ordem de execução de cada projetista é definida em Sequência por projetista."
-        acoes={<button className="btn" onClick={novo}><Icone n="mais" /> Nova TPE</button>} />
+        acoes={somenteLeitura ? <span className="badge">somente consulta</span> : <button className="btn" onClick={novo}><Icone n="mais" /> Nova TPE</button>} />
       {filtro && <Aviso tipo="info">Filtro aplicado pelo painel: <strong>{{ semresp: 'sem responsável', atrasadas: 'prazo vencido', breve: 'vencem em até 3 dias', semprazo: 'sem prazo' }[filtro]}</strong>. <a href="#" onClick={(e) => { e.preventDefault(); qs.delete('f'); setQs(qs) }}>Remover</a></Aviso>}
       <div className="row nao-imprimir">
         <input type="search" placeholder="Buscar TPE, cliente, descrição, responsável…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 340 }} aria-label="Buscar" />
@@ -230,7 +232,7 @@ export default function Tpes() {
       </div>
       <div className="rolagem">
         {linhas.length === 0 ? <Vazio>Nenhuma TPE com estes filtros.</Vazio> : (
-          <table className="tabela"><thead><tr><Ord campo="tpe">TPE</Ord><Ord campo="os">O.S. / cliente</Ord><Ord campo="grupo">Principal › grupo</Ord><th>Descrição</th><Ord campo="resp">Responsável</Ord><Ord campo="status">Status</Ord><th><span className="row" style={{ gap: 2, flexWrap: 'nowrap' }}><Ord2 campo="inicio">Início</Ord2> → <Ord2 campo="prazo">prazo</Ord2></span></th><Ord campo="horas" num>Horas</Ord><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th></th></tr></thead>
+          <table className="tabela"><thead><tr><Ord campo="tpe">TPE</Ord><Ord campo="os">O.S. / cliente</Ord><Ord campo="grupo">Principal › grupo</Ord><th>Descrição</th><Ord campo="resp">Responsável</Ord><Ord campo="status">Status</Ord><th><span className="row" style={{ gap: 2, flexWrap: 'nowrap' }}><Ord2 campo="inicio">Início</Ord2> → <Ord2 campo="prazo">prazo</Ord2></span></th><Ord campo="horas" num>Horas</Ord><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th hidden={somenteLeitura}></th></tr></thead>
             <tbody>{linhas.map((t: any) => {
               const p: any = t.predecessora_id ? porId.get(t.predecessora_id) : null
               return (
@@ -244,7 +246,7 @@ export default function Tpes() {
                   <td className="sem-quebra small">{dataBR(t.data_inicio)} → {dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><SeloPrazo prazo={t.prazo} status={t.status} /></div>}</td>
                   <td className="num">{h1(t.horas_totais)}{Math.abs((t.horas_tarefa ?? t.horas_totais) - t.horas_totais) > 1e-9 && <div className="small muted" title="Horas desta TPE somadas às das revisões (.1, .2…), usadas nas médias">c/ revisões {h1(t.horas_tarefa)}</div>}</td>
                   <td className="num">{t.consumo == null ? '—' : pct(t.consumo)}</td>
-                  <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                  <td className="nao-imprimir" hidden={somenteLeitura}><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
                     <button className="btn sec pequeno" onClick={() => editar(t)}>Editar</button>
                     {t.status !== 'FINALIZADA' && <button className="btn pequeno btn-finalizar" onClick={() => setFin({ t, data: hojeISO() })} title="Marcar como finalizada sem abrir a edição"><Icone n="check" /> Finalizar</button>}
                     {t.status === 'FINALIZADA' && <button className="btn sec pequeno" onClick={() => reabrir(t)} title="Gera a próxima revisão (.1, .2…)">Reabrir</button>}

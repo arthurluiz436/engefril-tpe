@@ -48,11 +48,26 @@ export function FaixaTeste() {
     </div>)
 }
 
+const MENU_OBSERVADOR: { grupo: string; itens: { to: string; n: string; t: string }[] }[] = [
+  { grupo: 'Acompanhamento', itens: [
+    { to: '/master', n: 'painel', t: 'Painel' },
+    { to: '/master/indicadores', n: 'grafico', t: 'Indicadores' },
+    { to: '/master/os-indicadores', n: 'alvo', t: 'Indicadores por Cliente/O.S.' },
+  ] },
+  { grupo: 'Planejamento (consulta)', itens: [
+    { to: '/master/os', n: 'clientes', t: 'Clientes e O.S.' },
+    { to: '/master/tpes', n: 'tpe', t: 'TPEs e tarefas' },
+    { to: '/cronograma', n: 'gantt', t: 'Cronograma da equipe' },
+    { to: '/calendario', n: 'calendario', t: 'Calendário' },
+  ] },
+]
+
 export function Layout({ children }: { children: ReactNode }) {
   const { perfil, sair } = useAuth()
   const [aberta, setAberta] = useState(false)
   const loc = useLocation()
   const master = perfil?.papel === 'master'
+  const observador = perfil?.papel === 'observador'
   const link = (i: { to: string; n: string; t: string }) => (
     <NavLink key={i.to} to={i.to} end={i.to === '/' || i.to === '/master'} className={({ isActive }) => (isActive ? 'ativo' : '')} onClick={() => setAberta(false)}>
       <Icone n={i.n} /> {i.t}
@@ -67,12 +82,13 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside className={`sidebar ${aberta ? 'aberta' : ''}`} aria-label="Menu principal">
         <div className="marca"><img src={logoBranco} alt="Engefril" /><span>GESTÃO DE PROJETOS - TPE</span></div>
         <nav>
-          {perfil?.recurso_id && (<><div className="grupo">Meu trabalho</div>{MENU_PROJETISTA.map(link)}</>)}
+          {perfil?.recurso_id && !observador && (<><div className="grupo">Meu trabalho</div>{MENU_PROJETISTA.map(link)}</>)}
+          {observador && MENU_OBSERVADOR.map((g) => (<div key={g.grupo} style={{ display: 'contents' }}><div className="grupo">{g.grupo}</div>{g.itens.map(link)}</div>))}
           {master && MENU_MASTER.map((g) => (<div key={g.grupo} style={{ display: 'contents' }}><div className="grupo">{g.grupo}</div>{g.itens.map(link)}</div>))}
         </nav>
         <div className="rodape">
           <div style={{ color: '#fff', fontWeight: 600 }}>{perfil?.nome || perfil?.email}</div>
-          <div style={{ color: '#9aa3ad', marginBottom: 10 }}>{master ? 'Supervisor' : 'Projetista'}{perfil?.recurso_nome ? ` · ${perfil.recurso_nome}` : ''}</div>
+          <div style={{ color: '#9aa3ad', marginBottom: 10 }}>{master ? 'Supervisor' : observador ? 'Observador · somente consulta' : 'Projetista'}{perfil?.recurso_nome ? ` · ${perfil.recurso_nome}` : ''}</div>
           {ambienteTeste && <div className="selo-teste">Teste</div>}
           <button className="btn sec pequeno" onClick={sair}><Icone n="sair" /> Sair</button>
         </div>

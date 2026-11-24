@@ -533,3 +533,15 @@ section.card h3 { font-size: .92rem; margin: 6px 0 10px; color: var(--grafite-90
 .cal-balao-lista li { border-left: 3px solid; padding: 4px 0 4px 9px; display: grid; gap: 2px; }
 .cal-balao-lista .lin1 { display: flex; align-items: baseline; gap: 6px; font-size: .85rem; }
 .cal-balao-lista .dur { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cor-proj { position: relative; }
+.cor-proj-apagar { margin-left: auto; }
+
+/* Cronograma: rótulos sem sobreposição e arrastar para reordenar (Sequência) */
+.g2-rot-tarefa { overflow: hidden; }
+.g2-rot-tarefa .g2-passa { margin-left: auto; }
+.g2-rot-tarefa.arrastavel, .g2-tarefa.arrastavel { cursor: grab; touch-action: none; }
+.g2-rot-tarefa.arrastavel:hover { background: #eef3fb; }
+.g2-rot-tarefa.arrastando, .g2-tarefa.arrastando { opacity: .45; }
+.g2-alca { color: var(--cinza-500); font-size: .75rem; letter-spacing: -2px; margin-right: -2px; user-select: none; }
+.g2-marca-arraste { position: absolute; left: 0; right: 0; height: 3px; background: var(--azul); border-radius: 2px; z-index: 5; box-shadow: 0 0 0 2px rgba(4, 74, 179, .18); }
+body.g2-arrastando, body.g2-arrastando * { cursor: grabbing !important; user-select: none !important; }

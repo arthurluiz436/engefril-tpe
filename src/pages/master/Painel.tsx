@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useBase } from '../../lib/base'
+import { useAuth } from '../../lib/auth'
 import { indicadores } from '../../lib/calculo'
 import { paraParametros, prazosDasOS, situacaoPrazo } from '../../lib/dados'
 import { dataBR, h1, hm, hojeISO, int, pct, reais0, somaDias } from '../../lib/formato'
@@ -10,6 +11,7 @@ import { filtrarPeriodo, SeletorPeriodo, textoPeriodo, usePeriodo } from '../../
 
 export default function Painel() {
   const { base, erro, recarregar, carregando, atualizadoEm } = useBase()
+  const { somenteLeitura } = useAuth()
   const navegar = useNavigate()
   const [periodo, setPeriodo] = usePeriodo(base)
   const recorte = useMemo(() => (base ? filtrarPeriodo(base, periodo) : null), [base, periodo])
@@ -66,11 +68,11 @@ export default function Painel() {
               ['O.S. em andamento com prazo final vencido', pend.osVencidas.length, '/master/os'],
               ['Lançamentos com horário sobreposto (mesmo projetista e dia)', pend.sobrep.length, '/master/apontamentos?f=sobrepostos'],
             ] as [string, number, string][]).map(([t, n, to]) => (
-              <tr key={t}><td><span className={`badge ${n ? 'ambar' : 'verde'}`}>{n ? '▲' : '●'}</span> {t}</td><td className="num"><strong>{n}</strong></td><td><Link to={to}>ver</Link></td></tr>
+              <tr key={t}><td><span className={`badge ${n ? 'ambar' : 'verde'}`}>{n ? '▲' : '●'}</span> {t}</td><td className="num"><strong>{n}</strong></td><td>{!somenteLeitura || !to.includes('apontamentos') ? <Link to={to}>ver</Link> : null}</td></tr>
             ))}
           </tbody></table>
         </div>
-        <div className="card">
+        {!somenteLeitura && <div className="card">
           <h2>Ações frequentes</h2>
           <div className="grid2" style={{ gap: 10 }}>
             <Link className="btn sec" to="/master/tpes?novo=1"><Icone n="mais" /> Nova TPE</Link>
@@ -80,7 +82,7 @@ export default function Painel() {
             <Link className="btn sec" to="/master/importar"><Icone n="importar" /> Importar planilha</Link>
             <Link className="btn sec" to="/master/integridade"><Icone n="escudo" /> Integridade</Link>
           </div>
-        </div>
+        </div>}
       </div>
       <div className="card">
         <h2>Carga da equipe no período</h2>
@@ -92,9 +94,9 @@ export default function Painel() {
         <p className="muted small">Índice de alocação = horas apontadas ÷ capacidade (dias úteis entre o 1º e o último apontamento × 9 h seg–qui / 8 h sex). Não mede conclusão de tarefas.</p>
       </div>
       <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}><h2 style={{ margin: 0 }}>Cronograma da equipe</h2><Link to="/master/sequencias">Ajustar sequência</Link></div>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}><h2 style={{ margin: 0 }}>Cronograma da equipe</h2>{!somenteLeitura && <Link to="/master/sequencias">Ajustar sequência</Link>}</div>
         <p className="muted small" style={{ margin: '0 0 12px' }}>Planejado (barra de cima) × realizado (barra de baixo) de cada projetista, dos últimos 15 dias até o último prazo ativo. Clique no nome para abrir a sequência.</p>
-        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ausencias={base.ausencias} prazosOS={prazosDasOS(base.os)} aoEscolher={(id) => navegar(`/master/sequencias?r=${id}`)} />
+        <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ausencias={base.ausencias} prazosOS={prazosDasOS(base.os)} aoEscolher={somenteLeitura ? undefined : (id) => navegar(`/master/sequencias?r=${id}`)} />
       </div>
       {pend.atrasadas.length > 0 && (
         <div className="card"><h2>TPEs com prazo vencido</h2>

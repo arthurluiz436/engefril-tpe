@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { BaseProvider } from './lib/base'
 import { configurado } from './lib/supabase'
@@ -33,9 +33,15 @@ const Parametros = lazy(() => import('./pages/master/Parametros'))
 const Auditoria = lazy(() => import('./pages/master/Auditoria'))
 
 /** Guarda de rota: só melhora a navegação. A proteção real está nas políticas RLS do banco. */
+// telas da gestão que o Observador também consulta (somente leitura)
+const ROTAS_OBSERVADOR = ['', 'indicadores', 'os-indicadores', 'os', 'tpes']
 function SoMaster({ children }: { children: ReactNode }) {
   const { perfil } = useAuth()
-  if (perfil?.papel !== 'master') return <Aviso tipo="erro">Acesso restrito ao Supervisor.</Aviso>
+  const loc = useLocation()
+  const sub = loc.pathname.replace(/^\/master\/?/, '').split('/')[0]
+  const pode = perfil?.papel === 'master' || (perfil?.papel === 'observador' && ROTAS_OBSERVADOR.includes(sub))
+  // link antigo ou sessão trocada (ex.: saiu como Supervisor e entrou como projetista): volta ao Início
+  if (!pode) return <Navigate to={perfil?.papel === 'observador' ? '/master' : '/'} replace />
   return <BaseProvider>{children}</BaseProvider>
 }
 
@@ -45,16 +51,17 @@ function Rotas() {
   if (!sessao) return <Routes><Route path="/definir-senha" element={<DefinirSenha />} /><Route path="*" element={<Login />} /></Routes>
   if (!perfil) return <div style={{ padding: 24 }}><Aviso tipo="atencao">Seu login não tem perfil no sistema. Peça ao Supervisor para concluir seu cadastro.</Aviso></div>
   if (!perfil.ativo) return <div style={{ padding: 24 }}><Aviso tipo="erro">Seu acesso está desativado. Fale com o Supervisor.</Aviso></div>
-  const inicial = perfil.papel === 'master' && !perfil.recurso_id ? <Navigate to="/master" replace /> : <Inicio />
+  const inicial = (perfil.papel === 'master' && !perfil.recurso_id) || perfil.papel === 'observador' ? <Navigate to="/master" replace /> : <Inicio />
+  const soProjetista = (el: ReactNode) => (perfil.papel === 'observador' ? <Navigate to="/master" replace /> : el)
   return (
     <Layout>
       <Suspense fallback={<Carregando />}>
         <Routes>
           <Route path="/" element={inicial} />
           <Route path="/definir-senha" element={<DefinirSenha />} />
-          <Route path="/minhas-tarefas" element={<MinhasTarefas />} />
-          <Route path="/registrar" element={<RegistrarAtividade />} />
-          <Route path="/meus-apontamentos" element={<MeusApontamentos />} />
+          <Route path="/minhas-tarefas" element={soProjetista(<MinhasTarefas />)} />
+          <Route path="/registrar" element={soProjetista(<RegistrarAtividade />)} />
+          <Route path="/meus-apontamentos" element={soProjetista(<MeusApontamentos />)} />
           <Route path="/cronograma" element={<CronogramaProjetista />} />
           <Route path="/calendario" element={<CalendarioProjetista />} />
           <Route path="/master/*" element={<SoMaster><Routes>

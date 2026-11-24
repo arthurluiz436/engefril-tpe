@@ -19,7 +19,8 @@ function ApontamentosHoje({ lista, proximaTpe }: { lista: ApHoje[]; proximaTpe?:
   const extras = lista.reduce((s, a) => s + Number(a.horas_extras), 0)
   const ini = 6 * 60, fim = 20 * 60, pos = (m: number) => `${Math.max(0, Math.min(100, ((m - ini) / (fim - ini)) * 100))}%`
   const larg = (a: number, b: number) => `${Math.max(0.8, ((Math.min(b, fim) - Math.max(a, ini)) / (fim - ini)) * 100)}%`
-  const linkReg = proximaTpe ? `/registrar?tpe=${proximaTpe}` : '/registrar'
+  void proximaTpe
+  const linkReg = '/registrar'
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
@@ -115,7 +116,7 @@ export default function Inicio() {
           <Aviso tipo="atencao">
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <span><strong>Você ainda não registrou nenhum apontamento hoje ({dataBR(hojeISO())}).</strong> Lembre-se de lançar as horas trabalhadas.</span>
-              <Link className="btn pequeno" to={proxima ? `/registrar?tpe=${proxima.tpe_id}` : '/registrar'}>Registrar agora</Link>
+              <Link className="btn pequeno" to="/registrar">Registrar agora</Link>
             </div>
           </Aviso>
         </div>
@@ -125,7 +126,7 @@ export default function Inicio() {
           <p style={{ margin: 0 }}>Você ainda <strong>não fez nenhum apontamento hoje</strong> ({dataBR(hojeISO())}). Registre as atividades do dia para manter as horas em dia.</p>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button className="btn sec" onClick={() => setLembrete(false)}>Depois</button>
-            <Link className="btn" to={proxima ? `/registrar?tpe=${proxima.tpe_id}` : '/registrar'}>Registrar agora</Link>
+            <Link className="btn" to="/registrar">Registrar agora</Link>
           </div>
         </div>
       </Dialogo>
@@ -135,7 +136,7 @@ export default function Inicio() {
           <strong>Minhas tarefas</strong>
           <span>{tarefas ? `${abertas.length} em aberto, na ordem prevista` : 'Carregando…'}</span>
         </Link>
-        <Link to={proxima ? `/registrar?tpe=${proxima.tpe_id}` : '/registrar'} className="acao-grande">
+        <Link to="/registrar" className="acao-grande">
           <Icone n="relogio" t={30} />
           <strong>Registrar atividade</strong>
           <span>Informe a TPE, quando trabalhou e o que foi feito</span>
@@ -163,7 +164,7 @@ export default function Inicio() {
                     <div className="row" style={{ justifyContent: 'space-between' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="row" style={{ gap: 8 }}>
-                          <span className="ordem" title="Ordem de execução">{t.sequencia ?? i + 1}º</span>
+                          <span className="ordem" title="Ordem de execução (a mesma de Minhas tarefas)">{(abertas.findIndex((x) => x.tpe_id === t.tpe_id) + 1) || i + 1}º</span>
                           <SeloPrazo prazo={t.prazo} status={t.status} />
                           {aguardandoPredecessora(t) && <span className="badge aguardando">⏳ aguardando {t.predecessora_codigo}</span>}
                           <Selo v={t.status} />

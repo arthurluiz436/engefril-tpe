@@ -26,7 +26,13 @@ export default function Usuarios() {
     setEnviando(true)
     const email = convite.email.trim().toLowerCase()
     try {
-      await admin('convidar', { email, nome: convite.nome.trim(), recurso_id: convite.recurso_id ? Number(convite.recurso_id) : null, papel: convite.papel })
+      const obs = convite.papel === 'observador'
+      const r = await admin('convidar', { email, nome: convite.nome.trim(), recurso_id: obs ? null : convite.recurso_id ? Number(convite.recurso_id) : null, papel: convite.papel })
+      if (obs) {
+        const id = r?.user_id ?? (await supabase.from('profiles').select('user_id').eq('email', email).maybeSingle()).data?.user_id
+        const { error } = await supabase.from('profiles').update({ papel: 'observador', recurso_id: null }).eq('user_id', id)
+        if (error) throw error
+      }
       avisar('ok', 'Convite enviado por e-mail. O usuário definirá a própria senha pelo link.'); setConvite(null); carregar()
     } catch (e) {
       // antes de mostrar erro, confere no banco se o convite foi criado mesmo assim (ex.: resposta perdida ou repetida)
@@ -43,6 +49,14 @@ export default function Usuarios() {
       avisar('ok', 'Alteração registrada na auditoria.'); carregar()
     } catch (e) { avisar('erro', mensagemErro(e)) }
   }
+  async function apagarRecurso(r: any) {
+    const login = perfis.find((p) => p.recurso_id === r.id)
+    if (login) return avisar('erro', `${r.nome} está vinculado ao login de ${login.nome || login.email}. Tire o vínculo na tabela acima antes de apagar.`)
+    if (!(await confirmar('Apagar projetista', <>Apagar <strong>{r.nome}</strong>? Só é possível se ele não tiver TPE vinculada nem apontamento. O custo H/H e as férias cadastradas dele também são apagados. Esta ação não pode ser desfeita.</>, 'Apagar', true))) return
+    const { data, error } = await supabase.rpc('excluir_recurso', { p_recurso: r.id })
+    if (error) return avisar('erro', /excluir_recurso/.test(error.message) && /function|schema cache/i.test(error.message) ? 'Para apagar projetistas, aplique a migração 20261124000010 no Supabase.' : mensagemErro(error))
+    avisar('ok', `${data ?? r.nome} apagado.`); recarregar()
+  }
   async function novoRecurso() {
     const nome = prompt('Nome do projetista (como aparecerá nos apontamentos):')?.trim(); if (!nome) return
     const { error } = await supabase.from('recursos').insert({ nome })
@@ -54,13 +68,13 @@ export default function Usuarios() {
     <div className="stack">
       {elemento}
       <Cabecalho titulo="Usuários" texto="Acesso só por convite. Cada conta é individual e vinculada a um projetista. Desativar bloqueia o login e o acesso aos dados imediatamente, sem apagar o histórico."
-        acoes={<><button className="btn sec" onClick={novoRecurso}><Icone n="mais" /> Novo projetista</button><button className="btn" onClick={() => setConvite({ email: '', nome: '', recurso_id: '', papel: 'projetista' })}><Icone n="usuarios" /> Convidar usuário</button></>} />
+        acoes={<><span className="small muted" style={{ maxWidth: 260 }}>Observador: só consulta (painel, indicadores, O.S., TPEs, cronograma e calendário).</span><button className="btn sec" onClick={novoRecurso}><Icone n="mais" /> Novo projetista</button><button className="btn" onClick={() => setConvite({ email: '', nome: '', recurso_id: '', papel: 'projetista' })}><Icone n="usuarios" /> Convidar usuário</button></>} />
       <div className="rolagem"><table className="tabela"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Projetista vinculado</th><th>Situação</th><th>Criado</th><th></th></tr></thead>
         <tbody>{perfis.map((p) => (
           <tr key={p.user_id}><td>{p.nome}</td><td>{p.email}</td>
-            <td><select value={p.papel} disabled={p.user_id === perfil?.user_id} onChange={(e) => alterar(p, { papel: e.target.value }, `Mudar o perfil para ${e.target.value === 'master' ? 'SUPERVISOR' : 'PROJETISTA'}`)} aria-label="Perfil">
-              <option value="projetista">Projetista</option><option value="master">Supervisor</option></select></td>
-            <td><select value={p.recurso_id ?? ''} onChange={(e) => alterar(p, { recurso_id: e.target.value ? Number(e.target.value) : null }, 'Alterar o projetista vinculado')} aria-label="Projetista">
+            <td><select value={p.papel} disabled={p.user_id === perfil?.user_id} onChange={(e) => alterar(p, e.target.value === 'observador' ? { papel: 'observador', recurso_id: null } : { papel: e.target.value }, `Mudar o perfil para ${({ master: 'SUPERVISOR', projetista: 'PROJETISTA', observador: 'OBSERVADOR (somente consulta)' } as Record<string, string>)[e.target.value]}`)} aria-label="Perfil">
+              <option value="projetista">Projetista</option><option value="master">Supervisor</option><option value="observador">Observador</option></select></td>
+            <td><select value={p.recurso_id ?? ''} disabled={p.papel === 'observador'} title={p.papel === 'observador' ? 'O Observador não aponta horas' : undefined} onChange={(e) => alterar(p, { recurso_id: e.target.value ? Number(e.target.value) : null }, 'Alterar o projetista vinculado')} aria-label="Projetista">
               <option value="">— nenhum —</option>{(base?.recursos ?? []).map((r: any) => <option key={r.id} value={r.id} disabled={vinculados.has(r.id) && p.recurso_id !== r.id}>{r.nome}</option>)}</select></td>
             <td>{p.ativo ? <span className="badge verde">ativo</span> : <span className="badge vermelho">desativado</span>}</td><td className="small">{dataHoraBR(p.criado_em)}</td>
             <td>{p.user_id !== perfil?.user_id && <button className="btn sec pequeno" onClick={() => alterar(p, { ativo: !p.ativo }, p.ativo ? 'Desativar o acesso' : 'Reativar o acesso')}>{p.ativo ? 'Desativar' : 'Reativar'}</button>}</td></tr>))}</tbody></table></div>
@@ -81,6 +95,7 @@ export default function Usuarios() {
                     avisar(error ? 'erro' : 'ok', error ? mensagemErro(error) : `Cor de ${r.nome} atualizada.`); if (!error) recarregar()
                   }} />
                 <span><strong>{r.nome}</strong><span className="small muted">{login ? login.email : 'sem login'}{!r.ativo ? ' · inativo' : ''}</span></span>
+                {!login && <button type="button" className="btn fantasma pequeno btn-apagar cor-proj-apagar" title={`Apagar ${r.nome} (só sem TPE vinculada)`} aria-label={`Apagar ${r.nome}`} onClick={(e) => { e.preventDefault(); apagarRecurso(r) }}><Icone n="lixo" /></button>}
               </label>)
           })}
         </div>
@@ -90,9 +105,9 @@ export default function Usuarios() {
         {convite && (<div className="stack">
           <Campo rotulo="E-mail corporativo"><input type="email" value={convite.email} onChange={(e) => setConvite({ ...convite, email: e.target.value })} /></Campo>
           <Campo rotulo="Nome"><input value={convite.nome} onChange={(e) => setConvite({ ...convite, nome: e.target.value })} /></Campo>
-          <Campo rotulo="Projetista vinculado" ajuda="Necessário para registrar apontamentos."><select value={convite.recurso_id} onChange={(e) => setConvite({ ...convite, recurso_id: e.target.value })}>
+          <Campo rotulo="Projetista vinculado" ajuda={convite.papel === 'observador' ? 'O Observador não aponta horas: fica sem projetista.' : 'Necessário para registrar apontamentos.'}><select value={convite.papel === 'observador' ? '' : convite.recurso_id} disabled={convite.papel === 'observador'} onChange={(e) => setConvite({ ...convite, recurso_id: e.target.value })}>
             <option value="">— nenhum (somente Supervisor) —</option>{(base?.recursos ?? []).filter((r: any) => !vinculados.has(r.id)).map((r: any) => <option key={r.id} value={r.id}>{r.nome}</option>)}</select></Campo>
-          <Campo rotulo="Perfil"><select value={convite.papel} onChange={(e) => setConvite({ ...convite, papel: e.target.value })}><option value="projetista">Projetista</option><option value="master">Supervisor</option></select></Campo>
+          <Campo rotulo="Perfil"><select value={convite.papel} onChange={(e) => setConvite({ ...convite, papel: e.target.value })}><option value="projetista">Projetista</option><option value="master">Supervisor</option><option value="observador">Observador (somente consulta)</option></select></Campo>
           <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn sec" onClick={() => setConvite(null)}>Cancelar</button>
             <button className="btn" disabled={enviando || !/^\S+@\S+\.\S+$/.test(convite.email) || convite.nome.trim().length < 2} onClick={convidar}>{enviando ? 'Enviando…' : 'Enviar convite'}</button></div>
         </div>)}

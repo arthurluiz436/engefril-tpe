@@ -49,8 +49,8 @@ Deno.serve(async (req) => {
     if (acao === 'convidar') {
       const email = String(corpo.email ?? '').trim().toLowerCase()
       const nome = String(corpo.nome ?? '').trim().slice(0, 80)
-      const papel = corpo.papel === 'master' ? 'master' : 'projetista'
-      const recurso = corpo.recurso_id == null ? null : Number(corpo.recurso_id)
+      const papel = corpo.papel === 'master' ? 'master' : corpo.papel === 'observador' ? 'observador' : 'projetista'
+      const recurso = corpo.recurso_id == null || papel === 'observador' ? null : Number(corpo.recurso_id)
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) return resp(400, { erro: 'E-mail inválido.' }, h)
       if (nome.length < 2) return resp(400, { erro: 'Informe o nome.' }, h)
       if (recurso !== null && !Number.isInteger(recurso)) return resp(400, { erro: 'Projetista inválido.' }, h)

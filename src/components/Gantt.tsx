@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PointerEventReact } from 'react'
 import { dataBR, diasEntre, hojeISO, osBR, somaDias } from '../lib/formato'
 import { cargaDiaria, clarear, corRecurso, diasDeAusencia, ehDiaUtil, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 
@@ -38,6 +38,8 @@ export interface GanttProps {
   ausencias?: Ausencia[]
   /** prazo final de cada O.S. (Supervisor); no projetista vem em t.os_prazo_final */
   prazosOS?: Map<number, string>
+  /** Sequência por projetista: arrastar as TPEs em aberto deste projetista para mudar a ordem (sem salvar). */
+  arrastar?: { recurso: string; aoSoltar: (ids: number[]) => void }
 }
 
 const H_PISTA = 32, H_LINHA = 28, H_CARGA = 18, H_EIXO = 50
@@ -56,8 +58,11 @@ interface Pista { id: string; nome: string; cor: string; abertas: any[]; conclui
 
 export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
-    mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS } = p
-  const ROT = p.rotulo ?? 272
+    mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS, arrastar } = p
+  const ROT = p.rotulo ?? 300
+  const rotRef = useRef<HTMLDivElement>(null)
+  // arrastar para reordenar: { id da TPE, posição de origem e destino na fila, y do ponteiro }
+  const [arr, setArr] = useState<{ id: number; de: number; para: number; y0: number; ativo: boolean } | null>(null)
   const somente = p.somente == null ? null : new Set(Array.isArray(p.somente) ? p.somente : [p.somente])
   const hoje = hojeISO()
   const trilhaRef = useRef<HTMLDivElement>(null)
@@ -153,6 +158,43 @@ export default function Gantt(p: GanttProps) {
     return { meses, marcas, naoUteis, semanas }
   }, [ini, dias, dx, feriados])
 
+  // linhas arrastáveis: só as TPEs em aberto do projetista escolhido
+  const filaArr = arrastar ? linhas.filter((l): l is Extract<Linha, { tipo: 'tarefa' }> => l.tipo === 'tarefa' && !l.feita && l.pista.id === arrastar.recurso) : []
+  const iniciarArraste = (t: any, e: PointerEventReact) => {
+    if (!arrastar || e.button !== 0) return
+    const de = filaArr.findIndex((l) => l.t.id === t.id)
+    if (de < 0) return
+    setArr({ id: t.id, de, para: de, y0: e.clientY, ativo: false })
+  }
+  useEffect(() => {
+    if (!arr) return
+    const mover = (e: PointerEvent) => {
+      const topo = rotRef.current?.getBoundingClientRect().top ?? 0
+      const y = e.clientY - topo
+      // posição de destino: pela metade de cada linha da fila (nunca sai da faixa do projetista)
+      let para = 0
+      for (let i = 0; i < filaArr.length; i++) if (y > filaArr[i].y + filaArr[i].h / 2) para = i
+      if (filaArr.length && y > filaArr[filaArr.length - 1].y + filaArr[filaArr.length - 1].h / 2) para = filaArr.length - 1
+      if (y < (filaArr[0]?.y ?? 0) + (filaArr[0]?.h ?? 0) / 2) para = 0
+      setArr((a) => (a ? { ...a, para, ativo: a.ativo || Math.abs(e.clientY - a.y0) > 4 } : a))
+    }
+    const soltar = () => {
+      setArr((a) => {
+        if (a && a.ativo && a.para !== a.de && arrastar) {
+          const ids = filaArr.map((l) => l.t.id as number)
+          const [x] = ids.splice(a.de, 1); ids.splice(a.para, 0, x)
+          setTimeout(() => arrastar.aoSoltar(ids), 0)
+        }
+        return null
+      })
+    }
+    document.addEventListener('pointermove', mover); document.addEventListener('pointerup', soltar)
+    document.body.classList.add('g2-arrastando')
+    return () => { document.removeEventListener('pointermove', mover); document.removeEventListener('pointerup', soltar); document.body.classList.remove('g2-arrastando') }
+  }, [arr?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const yMarca = arr?.ativo && filaArr.length ? (arr.para > arr.de ? filaArr[arr.para].y + filaArr[arr.para].h : filaArr[arr.para].y) : null
+  const podeArrastar = (l: Extract<Linha, { tipo: 'tarefa' }>) => !!arrastar && !l.feita && l.pista.id === arrastar.recurso
+
   if (!pistas.length) return <div className="vazio small">Nenhuma tarefa ativa ou concluída nos últimos {diasAntes} dias.</div>
 
   const xHoje = X(hoje) + dx / 2
@@ -184,6 +226,7 @@ export default function Gantt(p: GanttProps) {
       dica: cruza ? `${pr.codigo} (${donoDe.get(pr.id)!.nome}) → ${su.codigo} (${donoDe.get(su.id)!.nome}): quando ${pr.codigo} for iniciada, ${su.codigo} pode começar` : `${su.codigo} depende de ${pr.codigo}` })
   }
 
+
   const conteudoTarefa = (l: Extract<Linha, { tipo: 'tarefa' }>) => {
     const t = l.t, cor = l.pista.cor
     const prazo = iso(t.prazo)
@@ -207,7 +250,9 @@ export default function Gantt(p: GanttProps) {
     ].filter(Boolean).join('\n')
     const y = l.y
     return (
-      <g key={`t${t.id}`} className={`g2-tarefa ${l.feita ? 'feita' : ''}`} onClick={aoSelecionar ? () => aoSelecionar(t) : undefined} style={aoSelecionar ? { cursor: 'pointer' } : undefined}>
+      <g key={`t${t.id}`} className={`g2-tarefa ${l.feita ? 'feita' : ''} ${podeArrastar(l) ? 'arrastavel' : ''} ${arr?.ativo && arr.id === t.id ? 'arrastando' : ''}`}
+        onClick={aoSelecionar ? () => aoSelecionar(t) : undefined} onPointerDown={podeArrastar(l) ? (e) => iniciarArraste(t, e) : undefined}
+        style={aoSelecionar && !podeArrastar(l) ? { cursor: 'pointer' } : undefined}>
         <title>{dica}</title>
         <rect x={0} y={y} width={W} height={l.h} fill="transparent" />
         {lacuna && <rect x={lacuna.x} y={y + 2} width={lacuna.w} height={l.h - 4} fill="url(#g2-hachura-leve)" rx={3} />}
@@ -249,7 +294,8 @@ export default function Gantt(p: GanttProps) {
                 OS {[...oss].map((o) => osBR(o)).join(' · ')}</span>))}
             {hoje >= ini && hoje <= fim && <span className="g2-hoje-rot" style={{ left: xHoje }}>Hoje</span>}
           </div>
-          <div className="g2-rotulos" style={{ height: altura }}>
+          <div className="g2-rotulos" ref={rotRef} style={{ height: altura }}>
+            {yMarca != null && <div className="g2-marca-arraste" style={{ top: yMarca - 1 }} />}
             {linhas.map((l) => {
               if (l.tipo === 'pista') {
                 const pi = l.pista
@@ -271,10 +317,12 @@ export default function Gantt(p: GanttProps) {
               const outro = pred && donoPred && donoPred.id !== l.pista.id
               const atrasada = !l.feita && t.prazo && iso(t.prazo)! < hoje
               return (
-                <div key={`r${t.id}`} className={`g2-rot-tarefa ${l.zebra ? 'zebra' : ''} ${selecionada === t.id ? 'sel' : ''} ${l.feita ? 'feita' : ''}`}
+                <div key={`r${t.id}`} className={`g2-rot-tarefa ${l.zebra ? 'zebra' : ''} ${selecionada === t.id ? 'sel' : ''} ${l.feita ? 'feita' : ''} ${podeArrastar(l) ? 'arrastavel' : ''} ${arr?.ativo && arr.id === t.id ? 'arrastando' : ''}`}
+                  onPointerDown={podeArrastar(l) ? (e) => iniciarArraste(t, e) : undefined}
                   style={{ top: l.y, height: l.h, borderLeftColor: l.pista.cor }} title={`${t.codigo} · O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}
 ${t.descricao ?? ''}`}
                   onClick={aoSelecionar ? () => aoSelecionar(t) : undefined}>
+                  {podeArrastar(l) && <span className="g2-alca" aria-hidden="true" title="Arraste para mudar a ordem">⋮⋮</span>}
                   <span className={`gantt-n ${atrasada ? 'atrasada' : ''} ${l.feita ? 'ok' : ''}`}>{l.rot}</span>
                   <span className="gantt-cod">{t.codigo}</span>
                   {t.os != null && <span className="g2-os" title={`O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}`}>OS {osBR(t.os)}</span>}
@@ -342,6 +390,7 @@ ${t.descricao ?? ''}`}
                 <path key={i} d={s.path} fill="none" stroke={s.cor} strokeWidth={s.cruza ? 1.8 : 1.4} strokeDasharray={s.cruza ? '5 3' : undefined}
                   markerEnd={`url(#${idCor(s.cor)})`} opacity={0.9}><title>{s.dica}</title></path>))}
               {hoje >= ini && hoje <= fim && <line x1={xHoje} x2={xHoje} y1={0} y2={altura} stroke="var(--dourado)" strokeWidth={2} />}
+              {yMarca != null && <line x1={0} x2={W} y1={yMarca} y2={yMarca} stroke="var(--azul)" strokeWidth={2.5} strokeDasharray="6 3" />}
             </svg>
           </div>
         </div>

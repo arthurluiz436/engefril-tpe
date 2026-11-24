@@ -151,10 +151,11 @@ export default function Sequencias() {
             <label className="row small" style={{ gap: 6 }}><input type="checkbox" checked={soEste} onChange={(e) => setSoEste(e.target.checked)} style={{ width: 16, minHeight: 0 }} /> Só o projetista escolhido</label>
           </div>
           <p className="muted small" style={{ margin: '0 0 12px' }}>
-            Uma faixa por projetista, na cor dele{editado || qtdMudancas ? ', já com a ordem e as datas ainda não salvas' : ''}. Barra de cima: <strong>planejado</strong>; de baixo: <strong>realizado</strong>. Passe o mouse para ver as datas; clique no nome para ver a sequência.
+            Arraste as TPEs de {base.recursos.find((r: any) => String(r.id) === rec)?.nome ?? 'projetista escolhido'} (pela alça ⋮⋮) para mudar a ordem, como nas setas ao lado; nada é salvo até você clicar em Salvar sequência. Uma faixa por projetista, na cor dele{editado || qtdMudancas ? ', já com a ordem e as datas ainda não salvas' : ''}. Barra de cima: <strong>planejado</strong>; de baixo: <strong>realizado</strong>. Passe o mouse para ver as datas; clique no nome para ver a sequência.
           </p>
           <Gantt tpes={base.tpes} recursos={base.recursos} feriados={base.feriados} ordem={ordem} datas={novasDatas} destaque={rec} aoEscolher={escolher} somente={soEste ? rec : undefined}
-            ausencias={base.ausencias} prazosOS={prazosOS} />
+            ausencias={base.ausencias} prazosOS={prazosOS}
+            arrastar={{ recurso: rec, aoSoltar: (ids) => { const porIdL = new Map(lista.map((t) => [t.id, t])); const nova = [...ids.map((id) => porIdL.get(id)).filter(Boolean), ...lista.filter((t) => !ids.includes(t.id))]; setLista(nova as any[]); setMudou(true) } }} />
         </div>
       </div>
     </div>

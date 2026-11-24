@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useBase } from '../../lib/base'
+import { useAuth } from '../../lib/auth'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { linhasDe } from '../../lib/conjuntos'
 import { dataBR, diasEntre, h1, hojeISO, osBR, reais0 } from '../../lib/formato'
@@ -21,6 +22,7 @@ type Filtro = 'abertas' | 'atrasadas' | 'aptas' | 'finalizadas' | 'todas'
 
 export default function OrdensServico() {
   const { base, recarregar } = useBase()
+  const { somenteLeitura } = useAuth()
   const avisar = useAvisar()
   const { confirmar, elemento } = useConfirmar()
   const [busca, setBusca] = useState('')
@@ -149,7 +151,7 @@ export default function OrdensServico() {
     <div className="stack">
       {elemento}
       <Cabecalho titulo="Clientes e O.S." texto="Cada O.S. é cadastrada uma vez; as TPEs herdam cliente, local, nível, vendedor e classificação daqui. O.S. finalizada não recebe TPE nova: reabra se precisar."
-        acoes={<button className="btn" onClick={() => setEd({ novo: true, os: '', nome: '', status: 'EM ANDAMENTO', data_inicio: hojeISO() })}><Icone n="mais" /> Nova O.S.</button>} />
+        acoes={somenteLeitura ? <span className="badge">somente consulta</span> : <button className="btn" onClick={() => setEd({ novo: true, os: '', nome: '', status: 'EM ANDAMENTO', data_inicio: hojeISO() })}><Icone n="mais" /> Nova O.S.</button>} />
       <div className="row nao-imprimir">
         <input type="search" placeholder="Buscar O.S., cliente, cidade, vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 380 }} aria-label="Buscar" />
         <select value={fCliente} onChange={(e) => setFCliente(e.target.value)} aria-label="Cliente" style={{ maxWidth: 220 }}><option value="">Todos os clientes</option>{opcoes.clientes.map((x) => <option key={x}>{x}</option>)}</select>
@@ -181,7 +183,7 @@ export default function OrdensServico() {
           <span className="muted">Entregas:</span>
           <span className="badge verde">{resumoFin.prazo} no prazo</span><span className="badge azul">{resumoFin.antes} antes do prazo</span><span className="badge vermelho">{resumoFin.atrasada} atrasadas</span>
         </div>)}
-      <div className="rolagem"><table className="tabela"><thead><tr><Th k="os">O.S.</Th><Th k="cliente">Cliente · local</Th><Th k="nivel">Nível · classificação</Th><Th k="vendedor">Vendedor</Th><Th k="inicio" title="Data de início informada no cadastro da O.S.">Início</Th><Th k="prazo">Prazo final</Th><Th k="status">Status</Th><Th k="fin">Finalização</Th><Th k="tpes" num>TPEs (abertas)</Th><Th k="datas" title="Do primeiro ao último apontamento em TPEs da O.S. (ordena pelo último)">Datas apontadas</Th><Th k="horas" num>Horas</Th><Th k="custo" num>Custo</Th><th></th></tr></thead>
+      <div className="rolagem"><table className="tabela"><thead><tr><Th k="os">O.S.</Th><Th k="cliente">Cliente · local</Th><Th k="nivel">Nível · classificação</Th><Th k="vendedor">Vendedor</Th><Th k="inicio" title="Data de início informada no cadastro da O.S.">Início</Th><Th k="prazo">Prazo final</Th><Th k="status">Status</Th><Th k="fin">Finalização</Th><Th k="tpes" num>TPEs (abertas)</Th><Th k="datas" title="Do primeiro ao último apontamento em TPEs da O.S. (ordena pelo último)">Datas apontadas</Th><Th k="horas" num>Horas</Th><Th k="custo" num>Custo</Th><th hidden={somenteLeitura}></th></tr></thead>
         <tbody>{linhas.length === 0 && <tr><td colSpan={13} className="vazio">Nenhuma O.S. {({ abertas: 'em aberto', atrasadas: 'atrasada', aptas: 'pronta para finalizar', finalizadas: 'finalizada', todas: '' } as Record<string, string>)[filtro]} {busca ? 'para esta busca' : ''}.</td></tr>}
           {linhas.map((o: any) => {
             const p = parecerOS(o)
@@ -198,7 +200,7 @@ export default function OrdensServico() {
                 <td className="num">{o.qtd_tpes} ({o.tpes_abertas})</td>
                 <td className="sem-quebra small">{ultimoAp.get(o.os) ? <>{dataBR(primeiroAp.get(o.os))} – {dataBR(ultimoAp.get(o.os))}<div className="muted">último {diasEntre(ultimoAp.get(o.os)!, hoje) === 0 ? 'hoje' : `há ${diasEntre(ultimoAp.get(o.os)!, hoje)} dia(s)`}</div></> : <span className="muted">—</span>}</td>
                 <td className="num">{h1(o.horas)}</td><td className="num">{reais0(o.custo)}</td>
-                <td className="nao-imprimir"><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                <td className="nao-imprimir" hidden={somenteLeitura}><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
                   <button className="btn sec pequeno" onClick={() => setEd({ ...o, data_inicio: o.data_inicio ?? '', prazo_final: o.prazo_final ?? '', data_finalizacao: o.data_finalizacao ?? '' })}>Editar</button>
                   {o.status !== 'FINALIZADA'
                     ? <button className={`btn pequeno btn-finalizar ${apta(o) ? 'pronta' : ''}`} onClick={() => setFin({ o, data: hoje })} title={apta(o) ? 'Todas as TPEs desta O.S. estão finalizadas' : undefined}><Icone n="check" /> Finalizar</button>

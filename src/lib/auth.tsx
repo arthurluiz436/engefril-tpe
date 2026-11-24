@@ -6,7 +6,7 @@ export interface Perfil {
   user_id: string
   nome: string
   email: string | null
-  papel: 'projetista' | 'master'
+  papel: 'projetista' | 'master' | 'observador'
   recurso_id: number | null
   ativo: boolean
   recurso_nome?: string | null
@@ -16,11 +16,13 @@ interface Ctx {
   sessao: Session | null
   perfil: Perfil | null
   carregando: boolean
+  /** Observador: só consulta (botões de edição ficam ocultos; o banco também bloqueia) */
+  somenteLeitura: boolean
   recarregar: () => Promise<void>
   sair: () => Promise<void>
 }
 
-const AuthCtx = createContext<Ctx>({ sessao: null, perfil: null, carregando: true, recarregar: async () => {}, sair: async () => {} })
+const AuthCtx = createContext<Ctx>({ sessao: null, perfil: null, carregando: true, somenteLeitura: false, recarregar: async () => {}, sair: async () => {} })
 
 /**
  * Links de convite enviados pelo Supabase (painel ou inviteUserByEmail) trazem a sessão no fragmento
@@ -74,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthCtx.Provider value={{
-      sessao, perfil, carregando,
+      sessao, perfil, carregando, somenteLeitura: perfil?.papel === 'observador',
       recarregar: () => carregarPerfil(sessao),
       sair: async () => { await supabase.auth.signOut(); setPerfil(null) },
     }}>
