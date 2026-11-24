@@ -1,10 +1,12 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { analisarOS, type Fatia, type Intervalo } from '../../lib/indicadoresOS'
-import { corRecurso } from '../../lib/agenda'
-import { dataBR, h1, hojeISO, osBR, pct, reais, reais0 } from '../../lib/formato'
+import { corRecurso, diasUteisEntre } from '../../lib/agenda'
+import { dataBR, diasEntre, h1, hojeISO, osBR, pct, reais, reais0 } from '../../lib/formato'
 import { Cabecalho, Carregando, Icone, Vazio } from '../../components/ui'
+import { SeletorPeriodo, usePeriodo } from '../../components/Periodo'
+import { useOrdem } from '../../components/Ordenacao'
 
 /**
  * Indicadores por Cliente/O.S.: escolha uma O.S. e veja o resumo gerencial calculado só com os dados
@@ -60,6 +62,7 @@ export default function IndicadoresOS() {
   const { base } = useBase()
   const [qs, setQs] = useSearchParams()
   const hoje = hojeISO()
+  const [periodo, setPeriodo] = usePeriodo(base, 'engefril.periodo.os', 'ano')
   const lista = useMemo(() => {
     if (!base) return []
     const horas = new Map<number, number>()
@@ -70,16 +73,20 @@ export default function IndicadoresOS() {
   const o = lista.find((x) => x.o.os === osSel)?.o
   const a = useMemo(() => (base && o ? analisarOS(o, base.aps, base.tpes, base.feriados, hoje) : null), [base, o, hoje])
   const corProj = useMemo(() => new Map((base?.recursos ?? []).map((r: any, i: number) => [r.nome as string, corRecurso(r, i)])), [base])
-  if (!base) return <Carregando />
-  const escolher = (v: string) => { qs.set('os', v); setQs(qs, { replace: true }) }
+  const resumoRef = useRef<HTMLDivElement>(null)
+  if (!base || !periodo) return <Carregando />
+  const escolher = (v: number | string, rolar = false) => {
+    qs.set('os', String(v)); setQs(qs, { replace: true })
+    if (rolar) setTimeout(() => resumoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
 
   return (
     <div className="stack">
       <Cabecalho titulo="Indicadores por Cliente/O.S." texto="Escolha uma O.S. para ver o resumo gerencial calculado com os apontamentos e TPEs já registrados. Somente leitura: nada aqui altera os dados." />
-      <div className="row nao-imprimir">
-        <select value={osSel ?? ''} onChange={(e) => escolher(e.target.value)} aria-label="O.S." style={{ maxWidth: 520 }}>
-          {lista.map(({ o, h }) => <option key={o.os} value={o.os}>{osBR(o.os)} · {o.nome}{o.cidade ? ` (${o.cidade}${o.uf ? `/${o.uf}` : ''})` : ''}{h > 0 ? ` · ${h1(h)} h` : ' · sem horas'}</option>)}
-        </select>
+      <SeletorPeriodo periodo={periodo} aoMudar={setPeriodo} base={base} atalhos={['ano', 'seis_meses', 'mes_anterior', 'mes_atual']} />
+      <EntregasPeriodo os={lista.map((x) => x.o)} periodo={periodo} feriados={base.feriados} hoje={hoje} aoEscolher={(n) => escolher(n, true)} />
+      <div ref={resumoRef} className="ios-busca-linha nao-imprimir">
+        <BuscaOS lista={lista} valor={osSel} aoEscolher={(n) => escolher(n)} />
         <button className="btn sec" onClick={() => window.print()}><Icone n="exportar" /> Imprimir / PDF</button>
       </div>
       {!a || !o ? <Vazio>Nenhuma O.S. cadastrada.</Vazio> : <Painel a={a} o={o} corProj={corProj} hoje={hoje} />}
@@ -87,8 +94,141 @@ export default function IndicadoresOS() {
   )
 }
 
+/** Painel do período: O.S. finalizadas no período, no prazo × fora do prazo. */
+function EntregasPeriodo({ os, periodo, feriados, hoje, aoEscolher }: { os: any[]; periodo: { ini: string; fim: string }; feriados: Set<string>; hoje: string; aoEscolher: (os: number) => void }) {
+  const d = useMemo(() => {
+    const dentro = (x: string | null) => !!x && x >= periodo.ini && x <= periodo.fim
+    const fin = os.filter((o) => o.status === 'FINALIZADA' && dentro(o.data_finalizacao ? String(o.data_finalizacao).slice(0, 10) : null))
+    const linha = (o: any) => {
+      const f = String(o.data_finalizacao).slice(0, 10), p = o.prazo_final ? String(o.prazo_final).slice(0, 10) : null
+      if (!p) return { o, f, p, corridos: null as number | null, uteis: null as number | null }
+      const c = diasEntre(p, f)
+      const u = c === 0 ? 0 : c > 0 ? diasUteisEntre(p, f, feriados) - (diasUteisEntre(p, p, feriados)) : -(diasUteisEntre(f, p, feriados) - diasUteisEntre(f, f, feriados))
+      return { o, f, p, corridos: c, uteis: u }
+    }
+    const ls = fin.map(linha)
+    const noPrazo = ls.filter((x) => x.corridos != null && x.corridos <= 0).sort((a, b) => a.corridos! - b.corridos!)
+    const fora = ls.filter((x) => x.corridos != null && x.corridos > 0).sort((a, b) => b.corridos! - a.corridos!)
+    const semPrazo = ls.filter((x) => x.corridos == null)
+    // em aberto com prazo final dentro do período e já vencido (ainda não atendidas)
+    const vencidas = os.filter((o) => o.status !== 'FINALIZADA' && o.prazo_final && dentro(String(o.prazo_final).slice(0, 10)) && String(o.prazo_final).slice(0, 10) < hoje)
+    return { total: fin.length, noPrazo, fora, semPrazo, vencidas }
+  }, [os, periodo, feriados, hoje])
+  const avaliadas = d.noPrazo.length + d.fora.length
+  const indice = avaliadas ? d.noPrazo.length / avaliadas : null
+  const cor = indice == null ? 'var(--cinza-500)' : `hsl(${Math.round(indice * 120)} 62% 40%)`
+  return (
+    <section className="card ios-entregas">
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <h2 style={{ margin: 0 }}>Entregas de O.S. no período</h2>
+        <span className="muted small">O.S. finalizadas de {dataBR(periodo.ini)} a {dataBR(periodo.fim)} (pela data de finalização)</span>
+      </div>
+      {d.total === 0 && !d.vencidas.length ? <p className="muted small">Nenhuma O.S. finalizada neste período.</p> : (
+        <div className="ios-entregas-grade">
+          <div className="ios-indice">
+            <div className="ios-rosca" style={{ background: avaliadas ? `conic-gradient(var(--verde) 0 ${indice! * 100}%, var(--vermelho) ${indice! * 100}% 100%)` : 'var(--cinza-100)' }}>
+              <div><strong style={{ color: cor }}>{indice == null ? '—' : pct(indice)}</strong><span>no prazo</span></div>
+            </div>
+            <div className="ios-indice-num">
+              <div><span className="ponto verde" /> <strong>{d.noPrazo.length}</strong> no prazo ou antes</div>
+              <div><span className="ponto vermelho" /> <strong>{d.fora.length}</strong> fora do prazo</div>
+              {d.semPrazo.length > 0 && <div className="muted small">{d.semPrazo.length} sem prazo final cadastrado (não avaliadas)</div>}
+              {d.vencidas.length > 0 && <div className="small" style={{ color: 'var(--ambar)', fontWeight: 600 }}>{d.vencidas.length} em aberto com prazo vencido no período</div>}
+            </div>
+          </div>
+          <div className="ios-entregas-col">
+            <h3><span className="ponto verde" /> Atendidas no prazo</h3>
+            {d.noPrazo.length ? d.noPrazo.map((x) => (
+              <button key={x.o.os} type="button" className="ios-chip-os ok" onClick={() => aoEscolher(x.o.os)} title={`Prazo ${dataBR(x.p)} · finalizada ${dataBR(x.f)} — ver indicadores`}>
+                <strong>{osBR(x.o.os)}</strong><span className="cli">{x.o.nome}</span><span className="dias">{x.corridos === 0 ? 'no dia' : `${-x.corridos!} d antes`}</span>
+              </button>)) : <p className="muted small">Nenhuma.</p>}
+          </div>
+          <div className="ios-entregas-col">
+            <h3><span className="ponto vermelho" /> Atendidas fora do prazo</h3>
+            {d.fora.length ? d.fora.map((x) => (
+              <button key={x.o.os} type="button" className="ios-chip-os atraso" onClick={() => aoEscolher(x.o.os)} title={`Prazo ${dataBR(x.p)} · finalizada ${dataBR(x.f)} · ${x.uteis} dias úteis — ver indicadores`}>
+                <strong>{osBR(x.o.os)}</strong><span className="cli">{x.o.nome}</span><span className="dias">+{x.corridos} d</span>
+              </button>)) : <p className="muted small">Nenhuma.</p>}
+            {d.vencidas.length > 0 && <>
+              <h3 style={{ marginTop: 12 }}><span className="ponto ambar" /> Em aberto, prazo vencido</h3>
+              {d.vencidas.map((o) => (
+                <button key={o.os} type="button" className="ios-chip-os aberta" onClick={() => aoEscolher(o.os)} title={`Prazo final ${dataBR(o.prazo_final)} — ver indicadores`}>
+                  <strong>{osBR(o.os)}</strong><span className="cli">{o.nome}</span><span className="dias">+{diasEntre(String(o.prazo_final).slice(0, 10), hoje)} d</span>
+                </button>))}
+            </>}
+          </div>
+        </div>)}
+      <p className="muted small" style={{ margin: '10px 0 0' }}>Dias em dias corridos entre o prazo final e a data de finalização (passe o mouse para ver os dias úteis). Clique numa O.S. para ver o resumo gerencial dela abaixo.</p>
+    </section>
+  )
+}
+
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+/** Busca inteligente: digite número, cliente, cidade ou vendedor; a lista mostra as O.S. mais parecidas. */
+function BuscaOS({ lista, valor, aoEscolher }: { lista: { o: any; h: number }[]; valor?: number; aoEscolher: (os: number) => void }) {
+  const [texto, setTexto] = useState('')
+  const [aberta, setAberta] = useState(false)
+  const [ativo, setAtivo] = useState(0)
+  const atual = lista.find((x) => x.o.os === valor)?.o
+  const resultados = useMemo(() => {
+    const q = semAcento(texto.trim())
+    if (!q) return lista.slice(0, 12)
+    const termos = q.split(/\s+/)
+    const num = q.replace(/\D/g, '')
+    return lista.map((x) => {
+      const o = x.o
+      const campos = semAcento(`${osBR(o.os)} ${o.os} ${o.nome ?? ''} ${o.cidade ?? ''} ${o.uf ?? ''} ${o.vendedor ?? ''} ${o.nivel ?? ''} ${o.classificacao ?? ''}`)
+      if (!termos.every((t) => campos.includes(t))) return null
+      let s = 0
+      if (num && (osBR(o.os).startsWith(num) || String(o.os).startsWith(num))) s += 100
+      if (semAcento(o.nome ?? '').startsWith(q)) s += 50
+      if (semAcento(o.nome ?? '').includes(q)) s += 20
+      s += termos.length * 5 + Math.min(10, x.h / 50)
+      return { x, s }
+    }).filter(Boolean).sort((a, b) => b!.s - a!.s || b!.x.o.os - a!.x.o.os).slice(0, 12).map((r) => r!.x)
+  }, [texto, lista])
+  const escolher = (os: number) => { aoEscolher(os); setTexto(''); setAberta(false) }
+  const destacar = (s: string) => {
+    const q = texto.trim(); if (!q) return s
+    const i = semAcento(s).indexOf(semAcento(q.split(/\s+/)[0]))
+    return i < 0 ? s : <>{s.slice(0, i)}<mark>{s.slice(i, i + q.split(/\s+/)[0].length)}</mark>{s.slice(i + q.split(/\s+/)[0].length)}</>
+  }
+  return (
+    <div className="busca-os">
+      <label className="small muted" htmlFor="busca-os" style={{ fontWeight: 600 }}>O.S. analisada</label>
+      <div className="busca-os-caixa">
+        <Icone n="olho" t={16} />
+        <input id="busca-os" role="combobox" aria-expanded={aberta} aria-controls="busca-os-lista" aria-autocomplete="list" autoComplete="off"
+          placeholder={atual ? `${osBR(atual.os)} · ${atual.nome} — digite para trocar (número, cliente, cidade, vendedor…)` : 'Digite o número da O.S., cliente, cidade ou vendedor…'}
+          value={texto} onFocus={() => setAberta(true)} onBlur={() => setTimeout(() => setAberta(false), 150)}
+          onChange={(e) => { setTexto(e.target.value); setAberta(true); setAtivo(0) }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setAberta(true); setAtivo((i) => Math.min(resultados.length - 1, i + 1)) }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setAtivo((i) => Math.max(0, i - 1)) }
+            else if (e.key === 'Enter' && resultados[ativo]) { e.preventDefault(); escolher(resultados[ativo].o.os) }
+            else if (e.key === 'Escape') { setAberta(false); setTexto('') }
+          }} />
+      </div>
+      {aberta && (
+        <ul id="busca-os-lista" role="listbox" className="busca-os-lista">
+          {resultados.length === 0 && <li className="vazio">Nenhuma O.S. parecida com “{texto}”.</li>}
+          {resultados.map((x, i) => (
+            <li key={x.o.os} role="option" aria-selected={i === ativo} className={`${i === ativo ? 'ativo' : ''} ${x.o.os === valor ? 'atual' : ''}`}
+              onMouseDown={(e) => { e.preventDefault(); escolher(x.o.os) }} onMouseEnter={() => setAtivo(i)}>
+              <strong className="mono">{destacar(osBR(x.o.os))}</strong>
+              <span className="nome">{destacar(x.o.nome ?? '')}<span className="muted small"> {x.o.cidade ? `· ${x.o.cidade}${x.o.uf ? `/${x.o.uf}` : ''}` : ''}{x.o.vendedor ? ` · ${x.o.vendedor}` : ''}</span></span>
+              <span className={`badge ${x.o.status === 'FINALIZADA' ? 'verde' : x.h > 0 ? 'azul' : ''}`}>{x.o.status === 'FINALIZADA' ? 'finalizada' : x.h > 0 ? `${h1(x.h)} h` : 'sem horas'}</span>
+            </li>))}
+        </ul>)}
+    </div>
+  )
+}
+
 function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: any; corProj: Map<string, string>; hoje: string }) {
   const R = a.resumo, sit = SIT[a.situacao]
+  const oTpe = useOrdem({ k: 'horas', dir: -1 }), oProj = useOrdem({ k: 'horas', dir: -1 }), oCusto = useOrdem({ k: 'custo', dir: -1 }), oComp = useOrdem({ k: 'dif', dir: -1 })
+  const principaisComHoras = a.porPrincipal.filter((p) => p.horas > 0)
+  const valorFatia = (x: any, k: string) => (k === 'rotulo' || k === 'chave' || k === 'grupoCompleto' ? (k === 'grupoCompleto' ? `${x.principal} › ${x.grupo}` : x[k]) : x[k])
   const d = a.desvio
   const parecer = (() => {
     if (a.parecer === 'SEM_PRAZO') return { rot: 'Sem prazo final cadastrado', cls: 'cinza', det: '' }
@@ -135,7 +275,7 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
           <Card rot="Custo de mão de obra" val={reais0(R.custo)} sub={`${reais(a.custos.porHora)} por hora`} />
           <Card rot="Início → fim previsto" val={<span className="ios-datas">{dataBR(R.ini)} → {dataBR(R.prazoFinal)}</span>} sub={a.prazo.prazoTotal ? `prazo total: ${iv(a.prazo.prazoTotal)}` : 'datas incompletas no cadastro'} />
           <Card rot="1º → último apontamento" val={<span className="ios-datas">{dataBR(R.primeiroAp)} → {dataBR(R.ultimoAp)}</span>} sub={a.prazo.janela ? iv(a.prazo.janela) : 'sem apontamentos'} />
-          <Card rot="Projetistas envolvidos" val={a.porProjetista.length} sub={a.porProjetista[0] ? `maior participação: ${a.porProjetista[0].rotulo}` : '—'} />
+          <Card rot="Projetistas envolvidos" val={a.porProjetista.length} sub={a.porProjetista[0] ? <>maior participação: <strong style={{ color: corProj.get(a.porProjetista[0].rotulo) ?? 'inherit' }}><span className="g2-ponto" style={{ background: corProj.get(a.porProjetista[0].rotulo), display: 'inline-block', marginRight: 4, width: 8, height: 8 }} />{a.porProjetista[0].rotulo}</strong></> : '—'} />
         </div>
       </section>
 
@@ -159,8 +299,8 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
               </div>
             </div>
             <h3>Ranking das tarefas por horas</h3>
-            <div className="rolagem" style={{ maxHeight: 380 }}><table className="tabela"><thead><tr><th>#</th><th>TPE</th><th>Grupo principal › grupo</th><th>Descrição</th><th className="num">Horas</th><th className="num">% horas</th><th className="num">H. extras</th><th className="num">Revisões</th><th className="num">Projetistas</th></tr></thead>
-              <tbody>{a.porTpe.filter((t) => t.horas > 0).map((t, i) => <tr key={t.chave}><td>{i + 1}</td><td className="sem-quebra"><strong>{t.chave}</strong></td><td className="small">{t.principal} › {t.grupo}</td><td className="small" style={{ maxWidth: 360 }}>{t.descricao}</td><td className="num">{h1(t.horas)}</td><td className="num">{pct(t.pctHoras)}</td><td className="num">{t.extras > 0.0001 ? <span className="ind-he">{h1(t.extras)}</span> : '—'}</td><td className="num">{t.revisoes || '—'}</td><td className="num">{t.projetistas}</td></tr>)}</tbody></table></div>
+            <div className="rolagem" style={{ maxHeight: 380 }}><table className="tabela"><thead><tr><th>#</th><oTpe.Th k="chave">TPE</oTpe.Th><oTpe.Th k="grupoCompleto">Grupo principal › grupo</oTpe.Th><oTpe.Th k="descricao">Descrição</oTpe.Th><oTpe.Th k="horas" num>Horas</oTpe.Th><oTpe.Th k="pctHoras" num>% horas</oTpe.Th><oTpe.Th k="extras" num>H. extras</oTpe.Th><oTpe.Th k="revisoes" num>Revisões</oTpe.Th><oTpe.Th k="projetistas" num>Projetistas</oTpe.Th></tr></thead>
+              <tbody>{oTpe.ordenar(a.porTpe.filter((t) => t.horas > 0), valorFatia).map((t, i) => <tr key={t.chave}><td>{i + 1}</td><td className="sem-quebra"><strong>{t.chave}</strong></td><td className="small">{t.principal} › {t.grupo}</td><td className="small" style={{ maxWidth: 360 }}>{t.descricao}</td><td className="num">{h1(t.horas)}</td><td className="num">{pct(t.pctHoras)}</td><td className="num">{t.extras > 0.0001 ? <span className="ind-he">{h1(t.extras)}</span> : '—'}</td><td className="num">{t.revisoes || '—'}</td><td className="num">{t.projetistas}</td></tr>)}</tbody></table></div>
           </section>
 
           {/* ---------------- 3. participação */}
@@ -171,9 +311,9 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
               <div><h3>Horas por projetista</h3><Barras itens={a.porProjetista} cores={(f) => corProj.get(f.rotulo) ?? 'var(--azul)'} /></div>
               <div>
                 <h3>Grupos principais por projetista</h3>
-                <div className="rolagem"><table className="tabela"><thead><tr><th>Projetista</th>{a.porPrincipal.filter((p) => p.horas > 0).map((p) => <th key={p.chave} className="num">{p.rotulo}</th>)}<th className="num">TPEs</th></tr></thead>
-                  <tbody>{a.porProjetista.map((p) => <tr key={p.chave}><td className="sem-quebra"><span className="ind-proj"><span className="g2-ponto" style={{ background: corProj.get(p.rotulo) }} />{p.rotulo}</span></td>
-                    {a.porPrincipal.filter((x) => x.horas > 0).map((x) => { const v = a.matriz.get(p.rotulo)?.get(x.chave) ?? 0; return <td key={x.chave} className="num">{v > 0.0001 ? h1(v) : <span className="muted">—</span>}</td> })}
+                <div className="rolagem"><table className="tabela"><thead><tr><oProj.Th k="rotulo">Projetista</oProj.Th><oProj.Th k="horas" num>Total (h)</oProj.Th>{principaisComHoras.map((p) => <oProj.Th key={p.chave} k={`p:${p.chave}`} num>{p.rotulo}</oProj.Th>)}<oProj.Th k="tpes" num>TPEs</oProj.Th></tr></thead>
+                  <tbody>{oProj.ordenar(a.porProjetista, (x: any, k) => (k.startsWith('p:') ? a.matriz.get(x.rotulo)?.get(k.slice(2)) ?? 0 : x[k])).map((p) => <tr key={p.chave}><td className="sem-quebra"><span className="ind-proj" style={{ color: corProj.get(p.rotulo) }}><span className="g2-ponto" style={{ background: corProj.get(p.rotulo) }} />{p.rotulo}</span></td><td className="num"><strong>{h1(p.horas)}</strong></td>
+                    {principaisComHoras.map((x) => { const v = a.matriz.get(p.rotulo)?.get(x.chave) ?? 0; return <td key={x.chave} className="num">{v > 0.0001 ? h1(v) : <span className="muted">—</span>}</td> })}
                     <td className="num">{p.tpes}</td></tr>)}</tbody></table></div>
               </div>
             </div>
@@ -212,10 +352,13 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
               <MaiorMenor titulo="Tarefa de maior e menor impacto financeiro" e={a.extremosCusto.tpe} campo="custo" />
             </div>
             <h3>Custo por grupo principal, grupo e tarefa</h3>
-            <div className="rolagem" style={{ maxHeight: 380 }}><table className="tabela"><thead><tr><th>Nível</th><th>Item</th><th className="num">Horas</th><th className="num">Custo</th><th className="num">% do custo</th><th className="num">R$/h</th></tr></thead>
+            <div className="rolagem" style={{ maxHeight: 380 }}><table className="tabela"><thead><tr><th>Nível</th><oCusto.Th k="rotulo">Item</oCusto.Th><oCusto.Th k="horas" num>Horas</oCusto.Th><oCusto.Th k="custo" num>Custo</oCusto.Th><oCusto.Th k="pctCusto" num>% do custo</oCusto.Th><oCusto.Th k="rh" num>R$/h</oCusto.Th></tr></thead>
               <tbody>
-                {a.porPrincipal.filter((p) => p.custo > 0 || p.horas > 0).map((p) => (
-                  <FragmentoCusto key={p.chave} p={p} grupos={a.porGrupo.filter((g) => g.principal === p.chave)} tpes={a.porTpe} />))}
+                {(() => {
+                  const v = (x: any, k: string) => (k === 'rh' ? (x.horas ? x.custo / x.horas : null) : k === 'rotulo' ? (x.grupo && x.chave.includes(' › ') ? x.grupo : x.rotulo) : x[k])
+                  return oCusto.ordenar(a.porPrincipal.filter((p) => p.custo > 0 || p.horas > 0), v).map((p) => (
+                    <FragmentoCusto key={p.chave} p={p} grupos={oCusto.ordenar(a.porGrupo.filter((g) => g.principal === p.chave), v)} tpes={oCusto.ordenar(a.porTpe, v)} />))
+                })()}
                 <tr className="ios-total"><td colSpan={2}><strong>Total da O.S.</strong></td><td className="num"><strong>{h1(R.horas)}</strong></td><td className="num"><strong>{reais0(a.custos.total)}</strong></td><td className="num">100%</td><td className="num">{reais(a.custos.porHora)}</td></tr>
               </tbody></table></div>
           </section>
@@ -237,8 +380,8 @@ function Painel({ a, o, corProj, hoje }: { a: ReturnType<typeof analisarOS>; o: 
           <>
             <h3>Referência de outras O.S. (mesmo grupo principal › grupo)</h3>
             <p className="muted small">Só aparecem grupos com 3 ou mais TPEs com horas em pelo menos 2 outras O.S. Projetos diferentes podem ter escopos diferentes: use como referência, não como meta.</p>
-            <div className="rolagem"><table className="tabela"><thead><tr><th>Grupo</th><th className="num">Horas/TPE nesta O.S.</th><th className="num">Média em outras O.S.</th><th className="num">Diferença</th><th className="num">Amostra</th></tr></thead>
-              <tbody>{a.comparacao.map((c) => <tr key={c.grupo}><td className="small">{c.grupo}</td><td className="num">{h1(c.aqui)} <span className="muted small">({c.tpesAqui} TPE)</span></td><td className="num">{h1(c.media)}</td>
+            <div className="rolagem"><table className="tabela"><thead><tr><oComp.Th k="grupo">Grupo</oComp.Th><oComp.Th k="aqui" num>Horas/TPE nesta O.S.</oComp.Th><oComp.Th k="media" num>Média em outras O.S.</oComp.Th><oComp.Th k="dif" num>Diferença</oComp.Th><oComp.Th k="amostra" num>Amostra</oComp.Th></tr></thead>
+              <tbody>{oComp.ordenar(a.comparacao, (x: any, k) => x[k]).map((c) => <tr key={c.grupo}><td className="small">{c.grupo}</td><td className="num">{h1(c.aqui)} <span className="muted small">({c.tpesAqui} TPE)</span></td><td className="num">{h1(c.media)}</td>
                 <td className="num"><span className={`badge ${c.dif >= 0.3 ? 'vermelho' : c.dif <= -0.3 ? 'verde' : ''}`}>{c.dif >= 0 ? '+' : ''}{pct(c.dif)}</span></td><td className="num small">{c.amostra} TPEs · {c.osAmostra} O.S.</td></tr>)}</tbody></table></div>
           </>)}
         <p className="muted small" style={{ marginTop: 10 }}>Ver também: <Link to="/master/os">Clientes e O.S.</Link> · <Link to={`/master/tpes`}>TPEs e tarefas</Link></p>

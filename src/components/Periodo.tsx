@@ -28,19 +28,19 @@ export function calcularAtalho(a: Atalho, base: { tpes: any[]; aps: any[] }): [s
   return extremos(base)
 }
 
-export function usePeriodo(base: { tpes: any[]; aps: any[] } | null) {
+export function usePeriodo(base: { tpes: any[]; aps: any[] } | null, chave = CHAVE, padrao: Atalho = 'tudo') {
   const [p, setP] = useState<Periodo | null>(() => {
-    try { const s = sessionStorage.getItem(CHAVE); return s ? (JSON.parse(s) as Periodo) : null } catch { return null }
+    try { const s = sessionStorage.getItem(chave); return s ? (JSON.parse(s) as Periodo) : null } catch { return null }
   })
   // atalhos são recalculados (ex.: "mês atual" vira o mês novo; "tudo" acompanha novos cadastros)
   const efetivo = useMemo<Periodo | null>(() => {
     if (!base) return null
-    const atalho = p?.atalho ?? 'tudo'
+    const atalho = p?.atalho ?? padrao
     if (atalho === 'personalizado' && p) return p
     const [ini, fim] = calcularAtalho(atalho, base)
     return { atalho, ini, fim }
   }, [p, base])
-  useEffect(() => { try { if (p) sessionStorage.setItem(CHAVE, JSON.stringify(p)) } catch { /* sem armazenamento */ } }, [p])
+  useEffect(() => { try { if (p) sessionStorage.setItem(chave, JSON.stringify(p)) } catch { /* sem armazenamento */ } }, [p, chave])
   return [efetivo, setP] as const
 }
 
@@ -54,13 +54,13 @@ export function filtrarPeriodo<B extends { tpes: any[]; aps: any[] }>(base: B, p
   return { ...base, aps, tpes }
 }
 
-export function SeletorPeriodo({ periodo, aoMudar, base }: { periodo: Periodo; aoMudar: (p: Periodo) => void; base: { tpes: any[]; aps: any[] } }) {
+export function SeletorPeriodo({ periodo, aoMudar, base, atalhos }: { periodo: Periodo; aoMudar: (p: Periodo) => void; base: { tpes: any[]; aps: any[] }; atalhos?: Atalho[] }) {
   const escolher = (a: Atalho) => { const [ini, fim] = calcularAtalho(a, base); aoMudar({ atalho: a, ini, fim }) }
   return (
     <div className="periodo nao-imprimir">
       <span className="small muted" style={{ fontWeight: 600 }}>Período</span>
       <div className="segmentos rolavel" role="group" aria-label="Atalhos de período">
-        {ATALHOS.map(([k, r]) => <button key={k} type="button" aria-pressed={periodo.atalho === k} onClick={() => escolher(k)}>{r}</button>)}
+        {ATALHOS.filter(([k]) => !atalhos || atalhos.includes(k)).map(([k, r]) => <button key={k} type="button" aria-pressed={periodo.atalho === k} onClick={() => escolher(k)}>{r}</button>)}
       </div>
       <div className="periodo-datas">
         <input type="date" value={periodo.ini} max={periodo.fim} aria-label="Início do período" onChange={(e) => e.target.value && aoMudar({ atalho: 'personalizado', ini: e.target.value, fim: periodo.fim })} />
