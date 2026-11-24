@@ -4,7 +4,7 @@ import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, hojeISO, osBR } from '../../lib/formato'
 import { prazosDasOS, situacaoPrazo } from '../../lib/dados'
-import { diasDeFeriasNoPeriodo, indisponiveis, reprogramarFila } from '../../lib/agenda'
+import { diasDeAusencia, diasDeFeriasNoPeriodo, indisponiveis, reprogramarFila } from '../../lib/agenda'
 import { Cabecalho, Carregando, Icone, Selo, SeloPrazo, Vazio, useAvisar } from '../../components/ui'
 import Gantt from '../../components/Gantt'
 
@@ -45,7 +45,7 @@ export default function Sequencias() {
   const plano = useMemo(() => {
     if (!base || (!reprogramar && !inicios.size) || !lista.length) return null
     const outras = new Map(base.tpes.map((t: any) => [t.id, t]))
-    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any, hojeISO(), { ordemSalva, inicios })
+    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any, hojeISO(), { ordemSalva, inicios, ferias: diasDeAusencia(base.ausencias, rec) })
   }, [base, lista, reprogramar, rec, ordemSalva, inicios])
   const novasDatas = useMemo(() => {
     if (!plano) return undefined

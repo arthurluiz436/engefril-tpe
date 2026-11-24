@@ -40,7 +40,7 @@ export interface GanttProps {
   prazosOS?: Map<number, string>
 }
 
-const H_PISTA = 32, H_LINHA = 28, H_CARGA = 18, H_EIXO = 34
+const H_PISTA = 32, H_LINHA = 28, H_CARGA = 18, H_EIXO = 50
 const SEM_AUSENCIAS: Ausencia[] = []
 const iso = (d?: string | null) => (d ? String(d).slice(0, 10) : null)
 const maior = (a: string, b?: string | null) => (b && b > a ? b : a)
@@ -233,14 +233,14 @@ export default function Gantt(p: GanttProps) {
         <span><i className="lg sobrecarga" /> 2+ tarefas no mesmo dia</span>
         {mostrarSetas && <span><i className="lg seta" /> Predecessora <i className="lg seta-outro" /> passa para outro projetista</span>}
         {prazos.size > 0 && <span><i className="lg prazo-os" /> Prazo final da O.S.</span>}
-        {ausencias.length > 0 && <span><i className="lg ferias" /> Férias</span>}
+        {ausencias.length > 0 && <span><i className="lg ferias" /> Férias (na cor de cada projetista)</span>}
         <span><i className="lg hoje" /> Hoje</span>
       </div>
       <div className={`g2-rolagem ${pxDia === 'ajustar' ? '' : 'rola'}`}>
         <div className="g2-grade" style={{ gridTemplateColumns: `${ROT}px ${pxDia === 'ajustar' ? 'minmax(0, 1fr)' : `${W}px`}` }}>
           <div className="g2-cab-rot small">Projetista · TPE</div>
           <div className="g2-eixo" ref={trilhaRef} style={{ height: H_EIXO }}>
-            {eixo.meses.map((m) => <span key={m.d} className="g2-mes" style={{ left: X(m.d) + 3 }}>{m.rot}</span>)}
+            {eixo.meses.map((m) => <span key={m.d} className="g2-mes" style={{ left: X(m.d) }}>{m.rot}</span>)}
             {eixo.marcas.map((m) => <span key={m.d} className={`g2-dia ${m.fds ? 'fds' : ''}`} style={{ left: X(m.d) + dx / 2 }}>{m.rot}</span>)}
             {dx >= 18 && eixo.marcas.map((m) => <span key={`s${m.d}`} className="g2-sem" style={{ left: X(m.d) + dx / 2 }}>{SEM[new Date(`${m.d}T12:00:00Z`).getUTCDay()]}</span>)}
             {[...prazos.entries()].map(([d, oss]) => (
@@ -286,7 +286,10 @@ ${t.descricao ?? ''}`}
             <svg width={W} height={altura} role="img" aria-label="Cronograma das tarefas por projetista">
               <defs>
                 <pattern id="g2-hachura" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="var(--vermelho)" /><rect x="3" width="3" height="6" fill="#e9877e" /></pattern>
-                <pattern id="g2-ferias" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="10" fill="rgba(213,149,8,.07)" /><rect width="4" height="10" fill="rgba(213,149,8,.18)" /></pattern>
+                {pistas.map((pi) => (
+                  <pattern key={`pf${pi.id}`} id={`g2-ferias-${pi.id}`} width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect width="10" height="10" fill={clarear(pi.cor, 0.9)} /><rect width="4" height="10" fill={clarear(pi.cor, 0.7)} />
+                  </pattern>))}
                 <pattern id="g2-hachura-leve" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="8" fill="rgba(180,35,24,.16)" /></pattern>
                 {cores.map((c) => <marker key={c} id={idCor(c)} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill={c} /></marker>)}
               </defs>
@@ -297,6 +300,7 @@ ${t.descricao ?? ''}`}
                 : <rect key={`bt${l.t.id}`} x={0} y={l.y} width={W} height={l.h} fill={selecionada === l.t.id ? 'rgba(4,74,179,.10)' : l.zebra ? '#f6f7f9' : '#fff'} />)}
               {/* fins de semana e feriados */}
               {eixo.naoUteis.map((x) => <rect key={`n${x}`} x={X(x)} y={0} width={dx} height={altura} fill="rgba(72,74,78,.06)" />)}
+              {eixo.meses.filter((m) => m.d.endsWith('-01')).map((m) => <line key={`m${m.d}`} x1={X(m.d)} x2={X(m.d)} y1={0} y2={altura} stroke="rgba(72,74,78,.35)" strokeWidth={1.5} />)}
               {/* grade semanal e divisórias */}
               {eixo.semanas.map((x) => <line key={`s${x}`} x1={X(x)} x2={X(x)} y1={0} y2={altura} stroke="#e6e8ec" />)}
               {linhas.map((l) => <line key={`h${l.tipo}${l.tipo === 'tarefa' ? l.t.id : l.pista.id}`} x1={0} x2={W} y1={l.y + l.h - 0.5} y2={l.y + l.h - 0.5} stroke={l.tipo === 'tarefa' ? '#eef0f3' : '#dfe2e7'} />)}
@@ -325,9 +329,10 @@ ${t.descricao ?? ''}`}
                 if (!r || !fx) return null
                 return (
                   <g key={`f${pi.id}-${k}`}>
-                    <rect x={r.x} y={fx.y0} width={r.w} height={fx.y1 - fx.y0} fill="url(#g2-ferias)" />
+                    <rect x={r.x} y={fx.y0} width={r.w} height={fx.y1 - fx.y0} fill={`url(#g2-ferias-${pi.id})`} opacity={0.85} />
+                    <rect x={r.x} y={fx.y0} width={r.w} height={fx.y1 - fx.y0} fill="none" stroke={pi.cor} strokeOpacity={0.45} strokeDasharray="4 3" />
                     <title>{`${ROTULO_AUSENCIA[a.tipo ?? 'FERIAS'] ?? 'Férias'} de ${pi.nome}: ${dataBR(a.inicio)} a ${dataBR(a.fim)}${a.observacao ? ` (${a.observacao})` : ''}. Esses dias não contam na duração das tarefas.`}</title>
-                    {r.w > 46 && <text x={r.x + r.w / 2} y={fx.y0 + 20} textAnchor="middle" className="g2-ferias-rot">{ROTULO_AUSENCIA[a.tipo ?? 'FERIAS'] ?? 'Férias'}</text>}
+                    {r.w > 46 && <text x={r.x + r.w / 2} y={fx.y0 + 20} textAnchor="middle" className="g2-ferias-rot" style={{ fill: pi.cor }}>{ROTULO_AUSENCIA[a.tipo ?? 'FERIAS'] ?? 'Férias'}</text>}
                   </g>)
               }))}
               {/* prazo final das O.S. (linha discreta) */}

@@ -261,11 +261,11 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 .g2-grade { display: grid; position: relative; }
 .g2-cab-rot { position: sticky; left: 0; z-index: 3; background: #fff; display: flex; align-items: flex-end; padding: 0 10px 6px; color: var(--cinza-600); font-weight: 600; border-bottom: 1px solid var(--cinza-200); }
 .g2-eixo { position: relative; border-bottom: 1px solid var(--cinza-200); overflow: hidden; }
-.g2-mes { position: absolute; top: 1px; font-size: .7rem; font-weight: 700; color: var(--grafite-900); text-transform: capitalize; white-space: nowrap; }
-.g2-dia { position: absolute; top: 17px; transform: translateX(-50%); font-size: .66rem; color: var(--cinza-600); white-space: nowrap; }
+.g2-mes { position: absolute; top: 1px; padding-left: 4px; border-left: 2px solid var(--cinza-500); line-height: 1.1; z-index: 2; font-size: .7rem; font-weight: 700; color: var(--grafite-900); text-transform: capitalize; white-space: nowrap; }
+.g2-dia { position: absolute; top: 33px; transform: translateX(-50%); font-size: .66rem; color: var(--cinza-600); white-space: nowrap; }
 .g2-dia.fds { color: var(--cinza-500); }
 .g2-sem { display: none; }
-.g2-hoje-rot { position: absolute; top: 0; transform: translateX(-50%); background: var(--dourado); color: #fff; font-size: .62rem; font-weight: 700; padding: 1px 6px; border-radius: 99px; z-index: 2; }
+.g2-hoje-rot { position: absolute; top: 16px; transform: translateX(-50%); background: var(--dourado); color: #fff; font-size: .62rem; font-weight: 700; padding: 1px 6px; border-radius: 99px; z-index: 2; }
 .g2-rotulos { position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 1px 0 0 var(--cinza-200); }
 .g2-rot-pista, .g2-rot-tarefa, .g2-rot-carga { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 6px; border-left: 4px solid; padding: 0 8px 0 8px; min-width: 0; }
 .g2-rot-pista > button, .g2-rot-pista > div { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; border: 0; background: none; font: inherit; color: inherit; padding: 0; text-align: left; width: 100%; overflow: hidden; }
@@ -343,10 +343,10 @@ button.gantt-nome:hover strong { color: var(--azul); text-decoration: underline;
 .cal-mais:hover { background: var(--cinza-100); }
 .cal-linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--cinza-100); font-size: .86rem; }
 @media (max-width: 800px) { .cal-dia { min-height: 92px; padding: 2px; } .cal-hora { display: none; } .cal-item { font-size: .68rem; gap: 3px; padding: 0 2px; } }
-.g2-os-rot { position: absolute; top: 0; transform: translateX(-50%); font-size: .58rem; font-weight: 600; color: var(--cinza-600); background: #fff; border: 1px dashed var(--cinza-500); border-radius: 99px; padding: 0 5px; white-space: nowrap; z-index: 1; cursor: help; }
+.g2-os-rot { position: absolute; top: 16px; transform: translateX(-50%); font-size: .58rem; font-weight: 600; color: var(--cinza-600); background: #fff; border: 1px dashed var(--cinza-500); border-radius: 99px; padding: 0 5px; white-space: nowrap; z-index: 1; cursor: help; }
 .g2-ferias-rot { font-size: 10px; font-weight: 700; fill: #8a5f00; }
 .gantt-legenda .lg.prazo-os { width: 0 !important; height: 14px !important; border-left: 1px dashed #8a9099; border-radius: 0 !important; }
-.gantt-legenda .lg.ferias { background: repeating-linear-gradient(135deg, rgba(213,149,8,.35) 0 3px, rgba(213,149,8,.08) 3px 7px); }
+.gantt-legenda .lg.ferias { background: repeating-linear-gradient(135deg, rgba(72,74,78,.35) 0 3px, rgba(72,74,78,.08) 3px 7px); }
 .aviso-os { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 2px 8px; border-radius: 6px; background: var(--ambar-50); color: var(--ambar); font-weight: 600; }
 .cal-ferias { font-size: .66rem; font-weight: 600; color: #8a5f00; background: var(--dourado-50); border-left: 3px solid; border-radius: 3px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

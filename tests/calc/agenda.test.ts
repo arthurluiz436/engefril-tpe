@@ -1,6 +1,6 @@
 // Calendário de dias úteis e reprogramação de fila (Sequência por projetista).
 import { describe, expect, it } from 'vitest'
-import { cargaDiaria, diasDeFeriasNoPeriodo, diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoNumeroTpe, reprogramarFila } from '../../src/lib/agenda'
+import { cargaDiaria, duracaoTarefa, diasDeAusencia, diasDeFeriasNoPeriodo, diasUteisEntre, fimPorDiasUteis, indisponiveis, prazoMedioGrupo, proximoNumeroTpe, reprogramarFila } from '../../src/lib/agenda'
 
 const F = new Set(['2026-11-20']) // feriado numa sexta
 
@@ -170,5 +170,26 @@ describe('Reordenar com TPE que já tem apontamento antigo (caso Beatriz)', () =
     expect(p.get('TPE-160.0')).toEqual(['2026-11-27', '2026-11-30'])           // 2 dias úteis logo após a 149
     expect(p.get('TPE-097.1')).toEqual(['2026-12-01', '2026-12-04'])           // 4 dias úteis depois da 160
     for (let i = 1; i < r.length; i++) expect(r[i].para[0]! > r[i - 1].para[1]!).toBe(true) // escada: nenhuma sobreposição
+  })
+})
+
+describe('Férias cadastradas depois do planejamento (caso Walderli)', () => {
+  const ferias = diasDeAusencia([{ recurso_id: 7, inicio: '2026-12-21', fim: '2027-01-01' }], 7)
+  const naoUteis = new Set([...ferias, '2026-12-25', '2027-01-01'])
+  it('TPE que começa ou termina nas férias mantém a duração definida', () => {
+    expect(duracaoTarefa('2026-12-16', '2026-12-21', naoUteis, ferias)).toBe(4)  // 16, 17, 18, 21
+    expect(duracaoTarefa('2026-12-22', '2026-12-23', naoUteis, ferias)).toBe(2)  // inteira dentro das férias
+  })
+  it('TPE planejada já pulando as férias continua com a duração em dias de trabalho', () => {
+    expect(duracaoTarefa('2026-12-17', '2027-01-05', naoUteis, ferias)).toBe(4)  // 17, 18, 04/01, 05/01
+  })
+  it('na reprogramação as durações não mudam e as tarefas pulam as férias', () => {
+    const r = reprogramarFila([
+      { id: 1, codigo: 'A', data_inicio: '2026-12-16', prazo: '2026-12-21' },
+      { id: 2, codigo: 'B', data_inicio: '2026-12-22', prazo: '2026-12-23' },
+    ], naoUteis, new Map(), '2026-12-01', { ordemSalva: [1, 2], ferias })
+    expect(r.map((x) => x.dias)).toEqual([4, 2])
+    expect(r[0].para).toEqual(['2026-12-16', '2027-01-04'])  // 16, 17, 18 + (férias) + 04/01
+    expect(r[1].para).toEqual(['2027-01-05', '2027-01-06'])
   })
 })

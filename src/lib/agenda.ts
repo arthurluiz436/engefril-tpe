@@ -75,6 +75,9 @@ export interface OpcoesFila {
   ordemSalva?: number[]
   /** início definido à mão (id → data): a TPE começa nessa data e as seguintes se ajustam a partir dela */
   inicios?: Map<number, string>
+  /** dias de férias/ausência do projetista (já incluídos em `feriados`): usados para preservar a duração de TPEs
+   *  planejadas antes do cadastro das férias */
+  ferias?: Set<string>
 }
 
 /** Anda `n` dias úteis a partir de `d` (n = 0: o próprio dia, ou o próximo útil; n < 0: para trás). */
@@ -83,6 +86,19 @@ export function moverDiasUteis(d: string, n: number, feriados?: Set<string>): st
   for (let k = 0; k < n && k < 2000; k++) x = proximoDiaUtil(somaDiasCorridos(x, 1), feriados)
   for (let k = 0; k < -n && k < 2000; k++) { x = somaDiasCorridos(x, -1); for (let i = 0; i < 400 && !ehDiaUtil(x, feriados); i++) x = somaDiasCorridos(x, -1) }
   return x
+}
+
+/**
+ * Duração (dias úteis de trabalho) de uma TPE já planejada. Normalmente desconta fins de semana, feriados e férias.
+ * Exceção: se a TPE começa ou termina num dia de férias, ela foi planejada antes de as férias serem cadastradas —
+ * aí os dias de férias do período contaram como trabalho no planejamento e a duração definida é mantida
+ * (só fins de semana e feriados são descontados). Ao reprogramar, ela é colocada pulando as férias.
+ */
+export function duracaoTarefa(di: string, pz: string, feriados: Set<string>, ferias?: Set<string>): number {
+  const normal = Math.max(1, diasUteisEntre(di, pz, feriados))
+  if (!ferias?.size || !(ferias.has(di) || ferias.has(pz))) return normal
+  const semFerias = new Set([...feriados].filter((d) => !ferias.has(d)))
+  return Math.max(1, diasUteisEntre(di, pz, semFerias))
 }
 
 export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, outras: Map<number, TarefaAgenda> = new Map(), hoje?: string, opcoes: OpcoesFila = {}): Reprogramada[] {
@@ -107,7 +123,7 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
   return fila.map((t) => {
     if (!t.data_inicio || !t.prazo) return fixa(t)
     const di = t.data_inicio.slice(0, 10), pz = t.prazo.slice(0, 10)
-    const dias = Math.max(1, diasUteisEntre(di, pz, feriados))
+    const dias = duracaoTarefa(di, pz, feriados, opcoes.ferias)
     if (!(hoje && comecou(t))) soIniciadasAteAqui = false
     if (hoje && comecou(t) && soIniciadasAteAqui) {
       const real = (t.primeiro_apontamento ? String(t.primeiro_apontamento).slice(0, 10) : di)
