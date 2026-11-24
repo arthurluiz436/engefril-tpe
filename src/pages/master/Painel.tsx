@@ -43,7 +43,7 @@ export default function Painel() {
   const r = k.resumo
   return (
     <div className="stack">
-      <Cabecalho titulo="Painel do Supervisor" texto={`Indicadores do período ${textoPeriodo(periodo)}${r.inicio ? ` (apontamentos de ${dataBR(r.inicio)} a ${dataBR(r.fim)})` : " · sem apontamentos no período"}. Pendências e cronograma mostram a situação atual.`}
+      <Cabecalho titulo={somenteLeitura ? "Painel do Observador" : "Painel do Supervisor"} texto={`Indicadores do período ${textoPeriodo(periodo)}${r.inicio ? ` (apontamentos de ${dataBR(r.inicio)} a ${dataBR(r.fim)})` : " · sem apontamentos no período"}. Pendências e cronograma mostram a situação atual.`}
         acoes={<><span className="small muted">Atualizado {atualizadoEm?.toLocaleTimeString('pt-BR')}</span><button className="btn sec" onClick={recarregar} disabled={carregando}>Atualizar</button></>} />
       <SeletorPeriodo periodo={periodo} aoMudar={setPeriodo} base={base} />
       <div className="grid4">
