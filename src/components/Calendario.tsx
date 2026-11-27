@@ -201,7 +201,7 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
         ferias={ausencias.filter((a) => String(a.inicio).slice(0, 10) <= resumo.d && String(a.fim).slice(0, 10) >= resumo.d)} prazos={prazosDia.get(resumo.d) ?? []}
         clienteOS={clienteOS} tpe={tpe} cor={cor} nome={nome} aoFechar={() => setResumo(null)} />}
       {dicaDia.elemento}
-      <div className="card execucao-card"><ExecucaoMes entradas={entradas} mes={mes} tpes={tpes} recursos={recursos.filter((r: any) => !ocultos.has(String(r.id)))} cor={cor} naoUteis={naoUteisMes} /></div>
+      <div className="card execucao-card"><ExecucaoMes entradas={entradas} mes={mes} tpes={tpes} recursos={recursos.filter((r: any) => !ocultos.has(String(r.id)))} cor={cor} naoUteis={naoUteisMes} ausencias={ausencias.filter((a) => !ocultos.has(String(a.recurso_id)))} aoMudarMes={aoMudarMes} /></div>
       <Dialogo titulo={aberto ? `Apontamentos de ${dataBR(aberto)}` : ''} aberto={!!aberto} aoFechar={() => setAberto(null)}>
         <div className="stack" style={{ gap: 6 }}>
           {listaAberta.map((e) => (

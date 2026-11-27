@@ -45,6 +45,8 @@ export interface Reprogramada {
   desvio?: number
   /** início definido à mão nesta edição */
   manual?: boolean
+  /** a fila foi mantida, mas a TPE começa antes de a predecessora (de outro projetista) começar */
+  antesDaPredecessora?: { id: number; inicio: string }
 }
 
 /** Diferença com sinal, em dias úteis, entre o prazo salvo e o novo fim (+ depois, − antes). */
@@ -57,22 +59,21 @@ const comecou = (t: TarefaAgenda) => !!t.primeiro_apontamento || t.status === 'E
 /**
  * Reprograma a fila de um projetista na ordem dada, como num cronograma com vínculos término→início:
  * - cada tarefa mantém a sua duração (dias úteis entre início e prazo salvos);
- * - cada tarefa começa no dia útil seguinte ao fim da anterior e nunca antes do início da predecessora;
+ * - cada tarefa começa no dia útil seguinte ao fim da anterior: sem dias vazios e sem duas tarefas no mesmo dia;
+ * - a ordem definida pelo Supervisor manda: se a predecessora (de outro projetista) só começa depois, a TPE
+ *   não é empurrada (isso abriria um buraco na fila); ela vem marcada em `antesDaPredecessora` para o aviso;
  * - tarefas sem início ou sem prazo não têm duração conhecida: ficam como estão e não empurram a fila.
  *
  * Com `hoje` (atualização pelo andamento real, como a "data de status" do MS Project):
  * - tarefa JÁ INICIADA não tem as datas alteradas (o prazo é a linha de base e o atraso continua visível),
  *   mas o fim efetivo dela é o início real + duração; se isso já passou e ela não terminou, o fim efetivo é hoje.
- *   É esse fim que empurra (atraso) ou puxa (antecipação) as tarefas seguintes;
+ *   A seguinte começa no dia útil depois do que vier por último: o prazo dela ou o fim efetivo (atraso empurra;
+ *   como as datas da iniciada não mudam, um fim previsto antes do prazo não puxa a seguinte para dentro dela);
  * - tarefa NÃO INICIADA nunca é programada para antes de hoje.
  *
- * Com `opcoes.ordemSalva`, duas TPEs que continuam vizinhas mantêm o intervalo salvo entre elas (folga, ou
- * passagem no mesmo dia), como um vínculo término→início com defasagem. Com `opcoes.inicios`, a TPE começa
- * na data informada à mão e as seguintes se recalculam a partir dela.
+ * Com `opcoes.inicios`, a TPE começa na data informada à mão e as seguintes se recalculam a partir dela.
  */
 export interface OpcoesFila {
-  /** ordem salva da fila (ids): entre duas TPEs que continuam vizinhas, o intervalo (folga ou passagem) salvo é mantido */
-  ordemSalva?: number[]
   /** início definido à mão (id → data): a TPE começa nessa data e as seguintes se ajustam a partir dela */
   inicios?: Map<number, string>
   /** dias de férias/ausência do projetista (já incluídos em `feriados`): usados para preservar a duração de TPEs
@@ -106,15 +107,7 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
   const comDatas = fila.filter((t) => t.data_inicio && t.prazo)
   if (!comDatas.length) return fila.map(fixa)
   const hojeUtil = hoje ? proximoDiaUtil(hoje, feriados) : null
-  const porId = new Map(fila.map((t) => [t.id, t]))
-  // vizinha anterior (com datas) na ordem SALVA: base para manter o intervalo entre as duas
-  const anteriorSalva = new Map<number, TarefaAgenda>()
-  if (opcoes.ordemSalva) {
-    let ant: TarefaAgenda | null = null
-    for (const id of opcoes.ordemSalva) { const t = porId.get(id); if (!t?.data_inicio || !t.prazo) continue; if (ant) anteriorSalva.set(t.id, ant); ant = t }
-  }
   let fimAnterior: string | null = null
-  let anterior: TarefaAgenda | null = null
   const novoInicio = new Map<number, string>()
   const primeiroInicio = proximoDiaUtil(comDatas.map((t) => t.data_inicio!.slice(0, 10)).sort()[0], feriados)
   // Só as TPEs iniciadas que estão no COMEÇO da fila ficam presas às datas reais. Uma TPE com apontamento
@@ -130,7 +123,7 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
       let fimEf = fimPorDiasUteis(real, dias, feriados)
       if (fimEf < hoje) fimEf = hojeUtil!
       novoInicio.set(t.id, real)
-      fimAnterior = fimEf; anterior = t
+      fimAnterior = fimEf > pz ? fimEf : pz
       return { id: t.id, codigo: t.codigo, de: [di, pz], para: [di, pz], dias, mudou: false, iniciada: true, fimEfetivo: fimEf, desvio: desvioDiasUteis(pz, fimEf, feriados) }
     }
     const manual = opcoes.inicios?.get(t.id)
@@ -138,24 +131,19 @@ export function reprogramarFila(fila: TarefaAgenda[], feriados: Set<string>, out
     if (manual) ini = proximoDiaUtil(manual, feriados)
     else {
       if (!fimAnterior) ini = primeiroInicio
-      else {
-        // intervalo salvo entre as duas (1 = dia útil seguinte; 0 = começa no dia em que a anterior termina; 2+ = folga)
-        const viz = anterior && anteriorSalva.get(t.id) === anterior ? anterior : null
-        // folga salva (>1) é mantida; sobreposição ou passagem no mesmo dia (≤0) vira escada: dia útil seguinte
-        const lag = viz ? Math.max(1, desvioDiasUteis(viz.prazo!.slice(0, 10), di, feriados)) : 1
-        ini = moverDiasUteis(fimAnterior, lag, feriados)
-      }
+      else ini = moverDiasUteis(fimAnterior, 1, feriados) // escada: dia útil seguinte ao fim da anterior
       if (hojeUtil && ini < hojeUtil) ini = hojeUtil
     }
+    let antesDaPredecessora: Reprogramada['antesDaPredecessora']
     if (t.predecessora_id) {
       const p = novoInicio.get(t.predecessora_id) ?? outras.get(t.predecessora_id)?.data_inicio?.slice(0, 10)
-      if (p && p > ini) ini = proximoDiaUtil(p, feriados)
+      if (p && p > ini) antesDaPredecessora = { id: t.predecessora_id, inicio: p }
     }
     const fim = fimPorDiasUteis(ini, dias, feriados)
     novoInicio.set(t.id, ini)
-    fimAnterior = fim; anterior = t
+    fimAnterior = fim
     const mudou = ini !== di || fim !== pz
-    return { id: t.id, codigo: t.codigo, de: [di, pz], para: [ini, fim], dias, mudou, fimEfetivo: fim, desvio: desvioDiasUteis(pz, fim, feriados), ...(manual ? { manual: true } : {}) }
+    return { id: t.id, codigo: t.codigo, de: [di, pz], para: [ini, fim], dias, mudou, fimEfetivo: fim, desvio: desvioDiasUteis(pz, fim, feriados), ...(manual ? { manual: true } : {}), ...(antesDaPredecessora ? { antesDaPredecessora } : {}) }
   })
 }
 

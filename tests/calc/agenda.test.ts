@@ -23,14 +23,16 @@ describe('Reprogramação ao mudar a ordem', () => {
       ['TPE-001.0', '2026-11-25', '2026-11-27', 3],
     ])
   })
-  it('não começa antes da predecessora e ignora TPE sem datas', () => {
+  it('predecessora de outro projetista que começa depois: a fila não abre buraco, só avisa; ignora TPE sem datas', () => {
     const outras = new Map([[9, { id: 9, codigo: 'TPE-009.0', data_inicio: '2026-11-30', prazo: '2026-12-02' }]])
     const r = reprogramarFila([
-      { id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-23', prazo: '2026-11-23', predecessora_id: 9 },
+      { id: 3, codigo: 'TPE-003.0', data_inicio: '2026-11-23', prazo: '2026-11-23' },
+      { id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-26', prazo: '2026-11-26', predecessora_id: 9 },
       { id: 2, codigo: 'TPE-002.0', data_inicio: null, prazo: null },
     ], new Set(), outras)
-    expect(r[0].para).toEqual(['2026-11-30', '2026-11-30'])
-    expect(r[1].mudou).toBe(false)
+    expect(r[1].para).toEqual(['2026-11-24', '2026-11-24'])
+    expect(r[1].antesDaPredecessora).toEqual({ id: 9, inicio: '2026-11-30' })
+    expect(r[2].mudou).toBe(false)
   })
 })
 
@@ -104,14 +106,15 @@ describe('Atualização do cronograma pelo andamento (atraso e antecipação)', 
     expect(r[1].desvio).toBe(2)
     expect(r[2].para).toEqual(['2026-11-30', '2026-12-02'])
   })
-  it('TPE que começou antes do planejado puxa as seguintes', () => {
+  it('TPE em andamento com fim previsto antes do prazo: a seguinte só começa depois do prazo dela (nunca 2 no mesmo dia)', () => {
+    // caso Beatriz: TPE-145 começou 26/11, prazo 01/12, fim previsto 30/11 → TPE-160 começa 02/12
     const r = reprogramarFila([
-      { id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-23', prazo: '2026-11-27', status: 'EM ANDAMENTO', primeiro_apontamento: '2026-11-19' },
-      { id: 2, codigo: 'TPE-002.0', data_inicio: '2026-11-30', prazo: '2026-12-01' },
-    ], S, new Map(), '2026-11-20')
-    expect(r[0]).toMatchObject({ fimEfetivo: '2026-11-25', desvio: -2, mudou: false })
-    expect(r[1].para).toEqual(['2026-11-26', '2026-11-27'])
-    expect(r[1].desvio).toBe(-2)
+      { id: 1, codigo: 'TPE-145.0', data_inicio: '2026-11-27', prazo: '2026-12-01', status: 'EM ANDAMENTO', primeiro_apontamento: '2026-11-26' },
+      { id: 2, codigo: 'TPE-160.0', data_inicio: '2026-12-02', prazo: '2026-12-03' },
+    ], S, new Map(), '2026-11-26')
+    expect(r[0]).toMatchObject({ fimEfetivo: '2026-11-30', desvio: -1, mudou: false })
+    expect(r[1].para).toEqual(['2026-12-02', '2026-12-03'])
+    expect(r[1].mudou).toBe(false)
   })
   it('tarefa não iniciada nunca vai para antes de hoje', () => {
     const r = reprogramarFila([{ id: 1, codigo: 'TPE-001.0', data_inicio: '2026-11-16', prazo: '2026-11-17' }], S, new Map(), '2026-11-25')
@@ -133,24 +136,30 @@ describe('Início editado à mão e intervalos salvos', () => {
     { id: 2, codigo: 'TPE-002.0', data_inicio: '2026-11-24', prazo: '2026-11-25' }, // começa no dia em que a 1 termina
     { id: 3, codigo: 'TPE-003.0', data_inicio: '2026-11-30', prazo: '2026-12-01' }, // folga de 2 dias úteis (qui, sex)
   ]
-  it('passagem no mesmo dia vira escada (dia útil seguinte); folga salva é mantida', () => {
-    const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { ordemSalva: [1, 2, 3] })
-    expect(r.map((x) => x.para)).toEqual([['2026-11-23', '2026-11-24'], ['2026-11-25', '2026-11-26'], ['2026-12-01', '2026-12-02']])
+  it('passagem no mesmo dia vira escada e folgas são fechadas: sem dias vazios', () => {
+    const r = reprogramarFila(fila, S, new Map(), '2026-11-20')
+    expect(r.map((x) => x.para)).toEqual([['2026-11-23', '2026-11-24'], ['2026-11-25', '2026-11-26'], ['2026-11-27', '2026-11-30']])
+  })
+  it('9ª passada para 2ª: entra logo após a 1ª, mantendo a duração, e as outras seguem em escada', () => {
+    const t = (id: number, ini: string, fim: string) => ({ id, codigo: `T${id}`, data_inicio: ini, prazo: fim })
+    const r = reprogramarFila([t(1, '2026-11-23', '2026-11-24'), t(9, '2026-12-14', '2026-12-16'), t(2, '2026-11-25', '2026-11-26'), t(3, '2026-11-27', '2026-11-30')], S, new Map(), '2026-11-20')
+    expect(r.map((x) => x.para)).toEqual([['2026-11-23', '2026-11-24'], ['2026-11-25', '2026-11-27'], ['2026-11-30', '2026-12-01'], ['2026-12-02', '2026-12-03']])
+    for (let i = 1; i < r.length; i++) expect(r[i].para[0]).toBe(fimPorDiasUteis(r[i - 1].para[1]!, 2, S))
   })
   it('tarefas sobrepostas são separadas em escada, sem duas no mesmo dia', () => {
     const r = reprogramarFila([
       { id: 1, codigo: 'A', data_inicio: '2026-11-23', prazo: '2026-11-27' },
       { id: 2, codigo: 'B', data_inicio: '2026-11-24', prazo: '2026-11-25' },
-    ], S, new Map(), '2026-11-20', { ordemSalva: [1, 2] })
+    ], S, new Map(), '2026-11-20')
     expect(r[1].para).toEqual(['2026-11-30', '2026-12-01'])
   })
-  it('início da 1ª à mão empurra as seguintes mantendo durações e folgas', () => {
-    const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { ordemSalva: [1, 2, 3], inicios: new Map([[1, '2026-11-25']]) })
-    expect(r.map((x) => x.para)).toEqual([['2026-11-25', '2026-11-26'], ['2026-11-27', '2026-11-30'], ['2026-12-03', '2026-12-04']])
+  it('início da 1ª à mão empurra as seguintes mantendo as durações', () => {
+    const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { inicios: new Map([[1, '2026-11-25']]) })
+    expect(r.map((x) => x.para)).toEqual([['2026-11-25', '2026-11-26'], ['2026-11-27', '2026-11-30'], ['2026-12-01', '2026-12-02']])
     expect(r[0].manual).toBe(true)
   })
   it('data à mão em fim de semana vai para o próximo dia útil', () => {
-    const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { ordemSalva: [1, 2, 3], inicios: new Map([[2, '2026-11-28']]) })
+    const r = reprogramarFila(fila, S, new Map(), '2026-11-20', { inicios: new Map([[2, '2026-11-28']]) })
     expect(r[1].para).toEqual(['2026-11-30', '2026-12-01'])
   })
 })
@@ -163,7 +172,7 @@ describe('Reordenar com TPE que já tem apontamento antigo (caso Beatriz)', () =
   const t097 = { id: 97, codigo: 'TPE-097.1', data_inicio: '2026-11-27', prazo: '2026-12-02', status: 'NÃO INICIADA', primeiro_apontamento: '2026-11-04' }
   const t160 = { id: 160, codigo: 'TPE-160.0', data_inicio: '2026-12-03', prazo: '2026-12-04' }
   it('ao passar a 160 para antes da 097.1, as datas seguem a nova ordem em escada', () => {
-    const r = reprogramarFila([t148, t149, t160, t097], S, new Map(), '2026-11-23', { ordemSalva: [148, 149, 97, 160] })
+    const r = reprogramarFila([t148, t149, t160, t097], S, new Map(), '2026-11-23', {})
     const p = new Map(r.map((x) => [x.codigo, x.para]))
     expect(p.get('TPE-148.0')).toEqual(['2026-11-18', '2026-11-24'])           // em andamento no começo: datas mantidas
     expect(p.get('TPE-149.0')).toEqual(['2026-11-25', '2026-11-26'])
@@ -187,7 +196,7 @@ describe('Férias cadastradas depois do planejamento (caso Walderli)', () => {
     const r = reprogramarFila([
       { id: 1, codigo: 'A', data_inicio: '2026-12-16', prazo: '2026-12-21' },
       { id: 2, codigo: 'B', data_inicio: '2026-12-22', prazo: '2026-12-23' },
-    ], naoUteis, new Map(), '2026-12-01', { ordemSalva: [1, 2], ferias })
+    ], naoUteis, new Map(), '2026-12-01', { ferias })
     expect(r.map((x) => x.dias)).toEqual([4, 2])
     expect(r[0].para).toEqual(['2026-12-16', '2027-01-04'])  // 16, 17, 18 + (férias) + 04/01
     expect(r[1].para).toEqual(['2027-01-05', '2027-01-06'])

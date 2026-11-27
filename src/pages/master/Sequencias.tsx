@@ -44,10 +44,11 @@ export default function Sequencias() {
   // fim efetivo dela (atraso até hoje ou término antecipado) empurra ou puxa as seguintes. Calculada sempre,
   // não só ao mudar a ordem: atraso de uma TPE desatualiza o cronograma das próximas.
   const plano = useMemo(() => {
-    if (!base || (!reprogramar && !inicios.size) || !lista.length) return null
+    // mudar a ordem (setas ou arrastar) ou o início já reprograma; a caixa aplica também o andamento real sem mexer na ordem
+    if (!base || (!reprogramar && !inicios.size && !mudou) || !lista.length) return null
     const outras = new Map(base.tpes.map((t: any) => [t.id, t]))
-    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any, hojeISO(), { ordemSalva, inicios, ferias: diasDeAusencia(base.ausencias, rec) })
-  }, [base, lista, reprogramar, rec, ordemSalva, inicios])
+    return reprogramarFila(lista, indisponiveis(base.feriados, base.ausencias, rec), outras as any, hojeISO(), { inicios, ferias: diasDeAusencia(base.ausencias, rec) })
+  }, [base, lista, reprogramar, rec, mudou, inicios])
   const novasDatas = useMemo(() => {
     if (!plano) return undefined
     return new Map(plano.filter((p) => p.mudou).map((p) => [p.id, { data_inicio: p.para[0], prazo: p.para[1] }]))
@@ -105,7 +106,7 @@ export default function Sequencias() {
           </div>
           <label className="check-lado">
             <input type="checkbox" checked={reprogramar} onChange={(e) => setReprogramar(e.target.checked)} />
-            <span><strong>Reprogramar as datas</strong> pela ordem, pelo início editado à mão e pelo andamento real <span className="muted">(mantém a duração de cada TPE; atrasos empurram e antecipações puxam as seguintes; pula sábados, domingos, feriados e férias)</span></span>
+            <span><strong>Reprogramar as datas</strong> pela ordem, pelo início editado à mão e pelo andamento real <span className="muted">(em escada: cada TPE começa no dia útil seguinte ao fim da anterior, sem dias vazios e sem duas no mesmo dia; mantém a duração de cada uma; atrasos empurram as seguintes; pula sábados, domingos, feriados e férias. Ao mudar a ordem, as datas são recalculadas mesmo com a caixa desmarcada)</span></span>
           </label>
           {plano && qtdMudancas > 0 && (
             <div className={`aviso ${desatualizado ? 'atencao' : 'info'}`} role="status"><Icone n={desatualizado ? 'alerta' : 'info'} /><div>
@@ -140,18 +141,19 @@ export default function Sequencias() {
                         </div>)
                     })()}
                     {pred && <div className="small muted">Depois de <strong>{pred.codigo}</strong>{pred.responsavel && String(pred.responsavel_id) !== rec ? ` (${pred.responsavel})` : ''}</div>}
+                    {p?.antesDaPredecessora && <div className="aviso-os small"><Icone n="alerta" t={14} /> Pela ordem, começa em {dataBR(p.para[0])}, antes de a predecessora {pred?.codigo ?? ''} começar ({dataBR(p.antesDaPredecessora.inicio)}). A fila não foi empurrada para não deixar dias vazios; o projetista só consegue apontar nela depois que a predecessora for iniciada.</div>}
                     {!p?.iniciada && t.data_inicio && t.prazo && (
                       <label className="inicio-manual small">
                         <span>Início</span>
                         <input type="date" value={inicios.get(t.id) ?? p?.para[0] ?? String(t.data_inicio).slice(0, 10)}
                           onChange={(e) => mudarInicio(t.id, e.target.value)} aria-label={`Data de início de ${t.codigo}`} />
                         {inicios.has(t.id) && <span className="badge azul" title="Data definida à mão: as TPEs seguintes se ajustam a partir dela">definido à mão</span>}
-                        {inicios.has(t.id) && p?.para[0] && p.para[0] !== inicios.get(t.id) && <span className="muted">→ ajustado para {dataBR(p.para[0])} {t.predecessora_id ? '(dia útil / predecessora)' : '(próximo dia útil)'}</span>}
+                        {inicios.has(t.id) && p?.para[0] && p.para[0] !== inicios.get(t.id) && <span className="muted">→ ajustado para {dataBR(p.para[0])} (próximo dia útil)</span>}
                       </label>)}
                     {p?.iniciada && <div className="small muted" style={{ marginTop: 4 }}>Em andamento desde {dataBR(t.primeiro_apontamento ?? t.data_inicio)}: o início não pode ser alterado.</div>}
                     {p?.mudou && <div className="reprog small"><Icone n="relogio" t={14} /> Novo período: <strong>{dataBR(p.para[0])} → {dataBR(p.para[1])}</strong> ({p.dias} {p.dias === 1 ? 'dia útil' : 'dias úteis'})
                       {(p.desvio ?? 0) !== 0 && <span className={`badge ${p.desvio! > 0 ? 'vermelho' : 'verde'}`} style={{ marginLeft: 6 }}>{p.desvio! > 0 ? `postergada +${du(p.desvio!)}` : `antecipada ${du(p.desvio!)}`}</span>}</div>}
-                    {p?.iniciada && (p.desvio ?? 0) !== 0 && <div className="small" style={{ marginTop: 2 }}><span className={`badge ${p.desvio! > 0 ? 'vermelho' : 'verde'}`}>{p.desvio! > 0 ? `atraso de ${du(p.desvio!)}` : `adiantada ${du(p.desvio!)}`}</span> <span className="muted">em andamento: prazo {dataBR(p.para[1])}, fim previsto {dataBR(p.fimEfetivo)}. As datas dela não mudam; as seguintes se ajustam.</span></div>}
+                    {p?.iniciada && (p.desvio ?? 0) !== 0 && <div className="small" style={{ marginTop: 2 }}><span className={`badge ${p.desvio! > 0 ? 'vermelho' : 'verde'}`}>{p.desvio! > 0 ? `atraso de ${du(p.desvio!)}` : `adiantada ${du(p.desvio!)}`}</span> <span className="muted">em andamento: prazo {dataBR(p.para[1])}, fim previsto {dataBR(p.fimEfetivo)}. As datas dela não mudam; {p.desvio! > 0 ? 'as seguintes são empurradas.' : 'a seguinte começa depois do prazo dela.'}</span></div>}
                     {reprogramar && p && p.dias == null && (editado || qtdMudancas > 0) && <div className="small muted">Sem início ou prazo: as datas desta TPE não mudam e ela não empurra a fila.</div>}
                     {foraDoPrazoOS(t) && <div className="aviso-os small"><Icone n="alerta" t={14} /> Termina depois do prazo da O.S. {osBR(t.os)} ({dataBR(foraDoPrazoOS(t))})</div>}
                     {feriasDe(t) > 0 && <div className="small muted">Inclui {feriasDe(t)} dia(s) útil(eis) de férias do projetista, que não contam na duração.</div>}

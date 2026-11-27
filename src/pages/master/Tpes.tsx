@@ -16,11 +16,32 @@ const FILTROS = [
   ['PAUSADA', 'Pausadas'], ['FINALIZADA', 'Finalizadas'], ['todas', 'Todas'],
 ] as const
 type Filtro = (typeof FILTROS)[number][0]
-type Campo = 'tpe' | 'os' | 'grupo' | 'resp' | 'status' | 'inicio' | 'prazo' | 'horas'
+type Campo = 'tpe' | 'os' | 'grupo' | 'resp' | 'status' | 'inicio' | 'prazo' | 'horas' | 'apIni' | 'apFim'
 const VALOR: Record<Campo, (t: any) => any> = {
   tpe: (t) => t.numero * 1000 + t.revisao, os: (t) => Number(t.os), grupo: (t) => `${t.principal} › ${t.grupo}`.toLowerCase(),
   resp: (t) => (t.responsavel ?? '').toLowerCase(), status: (t) => STATUS.indexOf(t.status), inicio: (t) => t.data_inicio ? String(t.data_inicio).slice(0, 10) : null,
   prazo: (t) => t.prazo ? String(t.prazo).slice(0, 10) : null, horas: (t) => Number(t.horas_totais ?? 0),
+  apIni: (t) => t.ap_ini ?? null, apFim: (t) => t.ap_fim ?? null,
+}
+/**
+ * 1º e último apontamento de cada TPE contando as revisões/reaberturas dela: para a TPE-118.0 entram
+ * 118.0, 118.1, 118.2…; para a 118.1 entram 118.1, 118.2… (a revisão não herda as datas da original).
+ */
+function apontadoComRevisoes(tpes: any[]): Map<number, { ini: string | null; fim: string | null; revs: number }> {
+  const fam = new Map<string, { rev: number; ini: string | null; fim: string | null }[]>()
+  const chave = (c: string) => { const m = String(c).match(/^(.*)\.(\d+)$/); return m ? { raiz: m[1], rev: Number(m[2]) } : { raiz: String(c), rev: 0 } }
+  for (const t of tpes) {
+    const k = chave(t.codigo)
+    fam.set(k.raiz, [...(fam.get(k.raiz) ?? []), { rev: k.rev, ini: t.primeiro_apontamento ? String(t.primeiro_apontamento).slice(0, 10) : null, fim: t.ultimo_apontamento ? String(t.ultimo_apontamento).slice(0, 10) : null }])
+  }
+  const r = new Map<number, { ini: string | null; fim: string | null; revs: number }>()
+  for (const t of tpes) {
+    const k = chave(t.codigo)
+    const daqui = (fam.get(k.raiz) ?? []).filter((x) => x.rev >= k.rev)
+    const inis = daqui.map((x) => x.ini).filter(Boolean) as string[], fins = daqui.map((x) => x.fim).filter(Boolean) as string[]
+    r.set(t.id, { ini: inis.sort()[0] ?? null, fim: fins.sort()[fins.length - 1] ?? null, revs: daqui.filter((x) => x.rev > k.rev && x.ini).length })
+  }
+  return r
 }
 const iniciada = (t: any) => t && (t.status !== 'NÃO INICIADA' || Number(t.qtd_apontamentos ?? 0) > 0)
 
@@ -54,7 +75,9 @@ export default function Tpes() {
   const { linhas, contagem } = useMemo(() => {
     const vazio = Object.fromEntries(FILTROS.map(([k]) => [k, 0])) as Record<Filtro, number>
     if (!base) return { linhas: [], contagem: vazio }
+    const apont = apontadoComRevisoes(base.tpes)
     let ls: any[] = linhasDe('tpes', base).filter((t: any) => t.arquivada !== 'SIM')
+      .map((t: any) => { const a = apont.get(t.id); return { ...t, ap_ini: a?.ini ?? null, ap_fim: a?.fim ?? null, ap_revs: a?.revs ?? 0 } })
     if (fPrincipal) ls = ls.filter((t) => t.principal === fPrincipal)
     if (fGrupo) ls = ls.filter((t) => t.grupo === fGrupo)
     if (fResp === '-') ls = ls.filter((t) => !t.responsavel_id); else if (fResp) ls = ls.filter((t) => String(t.responsavel_id) === fResp)
@@ -232,7 +255,7 @@ export default function Tpes() {
       </div>
       <div className="rolagem">
         {linhas.length === 0 ? <Vazio>Nenhuma TPE com estes filtros.</Vazio> : (
-          <table className="tabela"><thead><tr><Ord campo="tpe">TPE</Ord><Ord campo="os">O.S. / cliente</Ord><Ord campo="grupo">Principal › grupo</Ord><th>Descrição</th><Ord campo="resp">Responsável</Ord><Ord campo="status">Status</Ord><th><span className="row" style={{ gap: 2, flexWrap: 'nowrap' }}><Ord2 campo="inicio">Início</Ord2> → <Ord2 campo="prazo">prazo</Ord2></span></th><Ord campo="horas" num>Horas</Ord><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th hidden={somenteLeitura}></th></tr></thead>
+          <table className="tabela"><thead><tr><Ord campo="tpe">TPE</Ord><Ord campo="os">O.S. / cliente</Ord><Ord campo="grupo">Principal › grupo</Ord><th>Descrição</th><Ord campo="resp">Responsável</Ord><Ord campo="status">Status</Ord><th><span className="row" style={{ gap: 2, flexWrap: 'nowrap' }}><Ord2 campo="inicio">Início</Ord2> → <Ord2 campo="prazo">prazo</Ord2></span></th><th title="Primeiro e último dia com apontamento, contando as revisões/reaberturas (.1, .2…) desta TPE"><span className="row" style={{ gap: 2, flexWrap: 'nowrap' }}><Ord2 campo="apIni">1º</Ord2> → <Ord2 campo="apFim">último apont.</Ord2></span></th><Ord campo="horas" num>Horas</Ord><th className="num" title="Horas consumidas ÷ estimativa (média do grupo). Não é % de conclusão.">Consumo</th><th hidden={somenteLeitura}></th></tr></thead>
             <tbody>{linhas.map((t: any) => {
               const p: any = t.predecessora_id ? porId.get(t.predecessora_id) : null
               return (
@@ -244,6 +267,7 @@ export default function Tpes() {
                   <td>{t.responsavel ? <span className="ind-proj" style={{ fontWeight: 500 }}><span className="g2-ponto" style={{ background: corResp.get(String(t.responsavel_id)) }} />{t.responsavel}</span> : <span className="badge ambar">sem responsável</span>}{t.sequencia && t.status !== 'FINALIZADA' && <div className="small muted">na fila</div>}</td>
                   <td><Selo v={t.status} /></td>
                   <td className="sem-quebra small">{dataBR(t.data_inicio)} → {dataBR(t.prazo)} {situacaoPrazo(t.prazo, t.status) && <div><SeloPrazo prazo={t.prazo} status={t.status} /></div>}</td>
+                  <td className="sem-quebra small">{t.ap_ini ? <>{dataBR(t.ap_ini)}{t.ap_fim && t.ap_fim !== t.ap_ini ? <> → {dataBR(t.ap_fim)}</> : null}{t.ap_revs > 0 && <div className="muted" title="O período inclui os apontamentos das revisões/reaberturas desta TPE">c/ {t.ap_revs} reabertura(s)</div>}</> : <span className="muted">sem apontamento</span>}</td>
                   <td className="num">{h1(t.horas_totais)}{Math.abs((t.horas_tarefa ?? t.horas_totais) - t.horas_totais) > 1e-9 && <div className="small muted" title="Horas desta TPE somadas às das revisões (.1, .2…), usadas nas médias">c/ revisões {h1(t.horas_tarefa)}</div>}</td>
                   <td className="num">{t.consumo == null ? '—' : pct(t.consumo)}</td>
                   <td className="nao-imprimir" hidden={somenteLeitura}><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>

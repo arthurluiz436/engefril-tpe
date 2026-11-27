@@ -593,7 +593,18 @@ body.g2-arrastando, body.g2-arrastando * { cursor: grabbing !important; user-sel
 .ex-selo.ok { fill: var(--verde-50); stroke: #b9e2cb; } .ex-selo.antes { fill: #eef3fb; stroke: #c4d6f2; } .ex-selo.atraso { fill: var(--vermelho-50); stroke: #f3c4bf; } .ex-selo.neutro { fill: var(--cinza-100); }
 .ex-selo-txt.ok { fill: var(--verde); } .ex-selo-txt.antes { fill: var(--azul); } .ex-selo-txt.atraso { fill: var(--vermelho); } .ex-selo-txt.neutro { fill: var(--cinza-600); }
 .ex-linha:hover .ex-fundo { fill: rgba(4, 74, 179, .06); }
-.ex-os-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
+.ex-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.ex-mes { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--cinza-200); border-radius: 99px; padding: 2px 6px; background: #fff; }
+.ex-mes strong { min-width: 150px; text-align: center; font-size: .92rem; }
+.legenda-exec i.fer { width: 18px; height: 11px; border-radius: 3px; background: repeating-linear-gradient(45deg, #dbe6f7 0 3px, #9fb9e3 3px 5px); border: 1px dashed #6b8fcf; }
+.ex-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.ex-layout.so-grafico { grid-template-columns: 1fr; }
+.ex-grafico { min-width: 0; }
+.ex-svg { overflow-x: auto; border: 1px solid var(--cinza-200); border-radius: 10px; background: #fff; }
+.ex-svg svg { display: block; }
+.ex-os { display: grid; gap: 6px; align-content: start; }
+.ex-os-grade { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 6px; }
+@media (max-width: 1250px) { .ex-layout { grid-template-columns: 1fr; } .ex-os-grade { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); } }
 .ex-os-card { border: 1px solid var(--cinza-200); border-top: 3px solid var(--azul); border-radius: 10px; padding: 12px 14px; display: grid; gap: 7px; background: #fff; }
 .ex-os-num { display: inline-flex; width: fit-content; font-size: .72rem; font-weight: 700; color: var(--cinza-600); border: 1px dashed var(--cinza-500); border-radius: 99px; padding: 1px 8px; }
 .ex-os-cli { font-weight: 700; font-size: .9rem; }

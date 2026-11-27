@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { dataBR, hm, hojeISO, osBR } from '../lib/formato'
-import { clarear } from '../lib/agenda'
+import { clarear, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
+import { Icone } from './ui'
 import { CartaoTpe, situacaoTpe, useDica } from './Dica'
 import type { EntradaCal } from './Calendario'
 
@@ -16,22 +17,49 @@ interface Props {
   recursos: any[]           // só os visíveis, na ordem da legenda
   cor: Map<string, string>  // id do recurso → cor
   naoUteis: Set<string>     // fins de semana são calculados; aqui feriados/dias sem expediente
+  ausencias?: Ausencia[]
+  aoMudarMes?: (mes: string) => void
 }
 
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const moverMes = (mes: string, d: number) => { const [a, m] = mes.split('-').map(Number); const t = new Date(Date.UTC(a, m - 1 + d, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}` }
+
 const SEM = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
-const ROT = 270, DX = 34, H_CAB = 46, H_PISTA = 32, H_LIN = 26, TAM = 16
+const ROT = 270, H_CAB = 46, H_PISTA = 32, H_LIN = 26, TAM = 16
 interface Linha { cod: string; rec: string; nome: string; dias: { dia: string; h: number; he: number; txt: string[] }[]; ini: number; fim: number; h: number; he: number; y: number; t: any }
 
-export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUteis }: Props) {
+export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUteis, ausencias = [], aoMudarMes }: Props) {
   const dica = useDica()
+  // a largura de cada dia acompanha o espaço disponível (sem rolagem quando cabe)
+  const caixa = useRef<HTMLDivElement>(null)
+  const [largura, setLargura] = useState(1100)
+  useEffect(() => {
+    const el = caixa.current; if (!el) return
+    const ro = new ResizeObserver(() => setLargura(el.clientWidth))
+    ro.observe(el); setLargura(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
   const [ano, m] = mes.split('-').map(Number)
   const nDias = new Date(Date.UTC(ano, m, 0)).getUTCDate()
+  const DX = Math.max(22, Math.min(46, (largura - ROT - 14) / nDias))
   const hoje = hojeISO()
   const diaIso = (d: number) => `${mes}-${String(d).padStart(2, '0')}`
   const dow = (d: number) => new Date(Date.UTC(ano, m - 1, d)).getUTCDay()
   const folga = (d: number) => dow(d) === 0 || dow(d) === 6 || naoUteis.has(diaIso(d))
   const porId = useMemo(() => new Map(tpes.map((t: any) => [t.id, t])), [tpes])
   const porCodigo = useMemo(() => new Map(tpes.map((t: any) => [t.codigo, t])), [tpes])
+
+  const feriasMes = useMemo(() => {
+    const ini = `${mes}-01`, fim = `${mes}-${String(nDias).padStart(2, '0')}`
+    const r = new Map<string, { a: number; b: number; tipo: string }[]>()
+    for (const x of ausencias) {
+      const a = String(x.inicio).slice(0, 10), b = String(x.fim).slice(0, 10)
+      if (b < ini || a > fim) continue
+      const id = String(x.recurso_id)
+      r.set(id, [...(r.get(id) ?? []), { a: a < ini ? 1 : Number(a.slice(8, 10)), b: b > fim ? nDias : Number(b.slice(8, 10)), tipo: x.tipo ?? 'FERIAS' }])
+    }
+    return r
+  }, [ausencias, mes, nDias])
 
   const { faixas, altura, posicoes, osMes, total } = useMemo(() => {
     const doMes = entradas.filter((e) => String(e.dia).slice(0, 7) === mes)
@@ -74,12 +102,14 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
     }
     const osMes = [...porOS.values()].sort((a, b) => b.h - a.h)
     return { faixas, altura: y + 4, posicoes, osMes, total: osMes.reduce((s, x) => s + x.h, 0) }
-  }, [entradas, mes, recursos, cor, porId, porCodigo]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [entradas, mes, recursos, cor, porId, porCodigo, DX]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function X(d: number) { return ROT + (d - 1) * DX }
   const W = ROT + nDias * DX + 12
+  const temFerias = faixas.some((f) => feriasMes.has(f.id))
+  const ddmm = (d: number) => `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
   const nomeDe = (id: string) => recursos.find((r: any) => String(r.id) === id)?.nome ?? '—'
-  const temDados = faixas.some((f) => f.linhas.length)
+  const temDados = faixas.some((f) => f.linhas.length) || temFerias
 
   const cartao = (l: Linha, f: { cor: string; nome: string }, alvo?: string) => {
     const mm = l.cod.match(/^(TPE-\d+)\.(\d+)$/)
@@ -99,9 +129,15 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
   return (
     <div className="execucao">
       {dica.elemento}
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <div className="ex-topo">
         <h2 style={{ margin: 0 }}>Execução do mês</h2>
-        <span className="muted small">O que cada projetista realmente fez, pelos apontamentos (não é o cronograma planejado). Passe o mouse para ver os detalhes.</span>
+        {aoMudarMes && (
+          <div className="ex-mes" role="group" aria-label="Trocar de mês">
+            <button type="button" className="btn fantasma pequeno" onClick={() => aoMudarMes(moverMes(mes, -1))} aria-label="Mês anterior"><span style={{ transform: 'rotate(-90deg)', display: 'inline-flex' }}><Icone n="cima" /></span></button>
+            <strong>{MESES[m - 1]} de {ano}</strong>
+            <button type="button" className="btn fantasma pequeno" onClick={() => aoMudarMes(moverMes(mes, 1))} aria-label="Próximo mês"><span style={{ transform: 'rotate(90deg)', display: 'inline-flex' }}><Icone n="cima" /></span></button>
+          </div>)}
+        <span className="muted small" style={{ marginLeft: 'auto' }}>O que cada projetista realmente fez, pelos apontamentos (não é o cronograma planejado). Passe o mouse para ver os detalhes.</span>
       </div>
       <div className="legenda-exec small muted">
         <span><i className="q" />dia com horas (mais escuro = mais horas)</span>
@@ -111,12 +147,17 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
         <span><span className="selo-prazo antes">−2d</span>concluída antes</span>
         <span><span className="selo-prazo atraso">+3d</span>concluída com atraso</span>
         <span><span className="selo-prazo atraso">!</span>em aberto e atrasada</span>
+        <span><i className="fer" />férias / ausência (na cor do projetista)</span>
       </div>
+      <div className={`ex-layout ${osMes.length ? "" : "so-grafico"}`}>
+      <div ref={caixa} className="ex-grafico">
       {!temDados ? <p className="muted small">Nenhum apontamento neste mês para os projetistas visíveis.</p> : (
-        <div className="rolagem" style={{ border: '1px solid var(--cinza-200)', borderRadius: 10 }}>
+        <div className="ex-svg">
           <svg width={W} height={altura} role="img" aria-label="Execução do mês por projetista">
             <defs>
               <pattern id="ex-folga" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(72,74,78,.04)" /><rect width="2.5" height="6" fill="rgba(72,74,78,.11)" /></pattern>
+              {faixas.filter((f) => feriasMes.has(f.id)).map((f) => (
+                <pattern key={f.id} id={`ex-fer-${f.id}`} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill={clarear(f.cor, 0.86)} /><rect width="3" height="8" fill={clarear(f.cor, 0.62)} /></pattern>))}
               <marker id="ex-seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b42318" /></marker>
             </defs>
             <text x={14} y={30} fontSize={12} fontWeight={600} fill="#6b7079">Projetista · TPE · O.S.</text>
@@ -132,10 +173,15 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
             {faixas.map((f) => (
               <g key={f.id}>
                 <rect x={0} y={f.y} width={W} height={H_PISTA} fill={clarear(f.cor, 0.9)} />
+                {(feriasMes.get(f.id) ?? []).map((v, k) => (
+                  <g key={k} onMouseMove={(e) => dica.mostrar(e, <div className="cd-cab" style={{ borderLeftColor: f.cor }}><div className="cd-cod">{ROTULO_AUSENCIA[v.tipo] ?? 'Ausência'} · {f.nome}</div><div className="muted">{ddmm(v.a)}{v.b !== v.a ? ` a ${ddmm(v.b)}` : ''} · {v.b - v.a + 1} dia(s) corrido(s) neste mês</div></div>)} onMouseLeave={dica.esconder}>
+                    <rect x={X(v.a)} y={f.y} width={(v.b - v.a + 1) * DX} height={f.fimY - f.y - 6} fill={`url(#ex-fer-${f.id})`} stroke={clarear(f.cor, 0.4)} strokeDasharray="4 3" />
+                    <text x={X(v.a) + ((v.b - v.a + 1) * DX) / 2} y={f.y + 20} textAnchor="middle" fontSize={11} fontWeight={700} fill={f.cor}>{(v.b - v.a + 1) * DX > 60 ? (ROTULO_AUSENCIA[v.tipo] ?? 'Ausência') : ''}</text>
+                  </g>))}
                 <rect x={0} y={f.y} width={4} height={f.fimY - f.y} fill={f.cor} />
                 <circle cx={18} cy={f.y + H_PISTA / 2} r={5} fill={f.cor} />
                 <text x={30} y={f.y + 20} fontSize={13} fontWeight={700} fill="#24272b">{f.nome}</text>
-                <text x={ROT + 8} y={f.y + 20} fontSize={11} fill="#6b7079">{f.linhas.length ? `${f.linhas.length} TPE(s) · ${hm(f.linhas.reduce((s, l) => s + l.h, 0))} no mês` : 'sem apontamentos no mês'}</text>
+                <text x={ROT + 8} y={f.y + 20} fontSize={11} fill="#6b7079">{f.linhas.length ? `${f.linhas.length} TPE(s) · ${hm(f.linhas.reduce((s, l) => s + l.h, 0))} no mês` : 'sem apontamentos no mês'}{feriasMes.has(f.id) ? ` · férias ${feriasMes.get(f.id)!.map((v) => v.a === v.b ? ddmm(v.a) : `${ddmm(v.a)}–${ddmm(v.b)}`).join(', ')}` : ''}</text>
                 {f.linhas.map((l) => {
                   const cy = l.y + H_LIN / 2
                   const sit = l.t?.status ? situacaoTpe(l.t) : null
@@ -177,10 +223,11 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
               <text x={X(Number(hoje.slice(8, 10))) + DX / 2} y={H_CAB - 2} textAnchor="middle" fontSize={9} fontWeight={700} fill="#a15c07">hoje</text></g>}
           </svg>
         </div>)}
+      </div>
 
       {osMes.length > 0 && (
         <div className="ex-os">
-          <h3 style={{ margin: '14px 0 4px' }}>O.S. trabalhadas no mês</h3>
+          <h3 style={{ margin: '0 0 4px' }}>O.S. trabalhadas no mês</h3>
           <div className="row small" style={{ gap: 18 }}>
             <span><strong>{osMes.length}</strong> O.S.</span><span><strong>{hm(total)}</strong> apontadas</span>
             <span><strong>{new Set(osMes.flatMap((x) => [...x.tpes])).size}</strong> TPEs</span>
@@ -203,6 +250,7 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
             })}
           </div>
         </div>)}
+      </div>
     </div>
   )
 }
