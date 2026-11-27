@@ -3,8 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { dataBR, hojeISO, osBR } from '../../lib/formato'
-import { prazosDasOS, situacaoPrazo } from '../../lib/dados'
-import { diasDeAusencia, diasDeFeriasNoPeriodo, indisponiveis, reprogramarFila } from '../../lib/agenda'
+import { paraParametros, prazosDasOS, situacaoPrazo } from '../../lib/dados'
+import { horasPorDiaUtil } from '../../lib/calculo'
+import { diasDeAusencia, diasDeFeriasNoPeriodo, duracaoTarefa, indisponiveis, prazoMedioGrupo, reprogramarFila } from '../../lib/agenda'
 import { Cabecalho, Carregando, Icone, Selo, SeloPrazo, Vazio, useAvisar } from '../../components/ui'
 import Gantt from '../../components/Gantt'
 
@@ -16,7 +17,7 @@ export default function Sequencias() {
   const [lista, setLista] = useState<any[]>([])
   const [mudou, setMudou] = useState(false)
   const [soEste, setSoEste] = useState(false)
-  const [reprogramar, setReprogramar] = useState(true)
+  const [reprogramar, setReprogramar] = useState(false)
   const [salvando, setSalvando] = useState(false)
   // inícios editados à mão (id → data), ainda não salvos
   const [inicios, setInicios] = useState<Map<number, string>>(new Map())
@@ -52,6 +53,11 @@ export default function Sequencias() {
     return new Map(plano.filter((p) => p.mudou).map((p) => [p.id, { data_inicio: p.para[0], prazo: p.para[1] }]))
   }, [plano])
   const planoDe = (id: number) => plano?.find((p) => p.id === id)
+  // prazo definido de cada TPE (dias úteis do início ao prazo) e o prazo sugerido pela média de horas do grupo
+  const horasDia = useMemo(() => (base ? horasPorDiaUtil(paraParametros(base.parametros)) : 8.8), [base])
+  const naoUteis = useMemo(() => (base ? indisponiveis(base.feriados, base.ausencias, rec) : new Set<string>()), [base, rec])
+  const ferias = useMemo(() => (base ? diasDeAusencia(base.ausencias, rec) : new Set<string>()), [base, rec])
+  const mediaDe = (t: any) => (base && t.principal && t.grupo ? prazoMedioGrupo(base.tpes, t.principal, t.grupo, horasDia) : null)
   const qtdMudancas = plano ? plano.filter((p) => p.mudou).length : 0
   const atrasadasIni = plano ? plano.filter((p) => p.iniciada && (p.desvio ?? 0) > 0) : []
   const adiantadasIni = plano ? plano.filter((p) => p.iniciada && (p.desvio ?? 0) < 0) : []
@@ -97,9 +103,9 @@ export default function Sequencias() {
             {editado && <span className="badge ambar">alterações não salvas</span>}
             {editado && <button type="button" className="btn fantasma pequeno" onClick={() => { setInicios(new Map()); setLista([...lista].sort((a: any, b: any) => ordemSalva.indexOf(a.id) - ordemSalva.indexOf(b.id))); setMudou(false) }}>Desfazer</button>}
           </div>
-          <label className="row small" style={{ gap: 6 }}>
-            <input type="checkbox" checked={reprogramar} onChange={(e) => setReprogramar(e.target.checked)} style={{ width: 16, minHeight: 0 }} />
-            Reprogramar as datas pela ordem, pelo início editado à mão e pelo andamento real (mantém a duração de cada TPE; atrasos empurram e antecipações puxam as seguintes; pula sábados, domingos, feriados e férias)
+          <label className="check-lado">
+            <input type="checkbox" checked={reprogramar} onChange={(e) => setReprogramar(e.target.checked)} />
+            <span><strong>Reprogramar as datas</strong> pela ordem, pelo início editado à mão e pelo andamento real <span className="muted">(mantém a duração de cada TPE; atrasos empurram e antecipações puxam as seguintes; pula sábados, domingos, feriados e férias)</span></span>
           </label>
           {plano && qtdMudancas > 0 && (
             <div className={`aviso ${desatualizado ? 'atencao' : 'info'}`} role="status"><Icone n={desatualizado ? 'alerta' : 'info'} /><div>
@@ -120,6 +126,19 @@ export default function Sequencias() {
                   <div className="ordem">{i + 1}</div>
                   <div><strong>{t.codigo}</strong> · {t.principal} › {t.grupo}<div className="small">{t.descricao}</div>
                     <div className="row small muted" style={{ gap: 8 }}>O.S. {osBR(t.os)} · {t.cliente} · {dataBR(t.data_inicio)} → {dataBR(t.prazo)} <SeloPrazo prazo={t.prazo} status={t.status} /> <Selo v={t.status} /></div>
+                    {(() => {
+                      const def = t.data_inicio && t.prazo ? duracaoTarefa(String(t.data_inicio).slice(0, 10), String(t.prazo).slice(0, 10), naoUteis, ferias) : null
+                      const m = mediaDe(t)
+                      const dif = def != null && m ? def - m.dias : null
+                      return (
+                        <div className="prazos-seq small">
+                          <span title="Duração planejada desta TPE (do início ao prazo, em dias úteis)">Prazo definido: <strong>{def != null ? `${def} ${def === 1 ? 'dia útil' : 'dias úteis'}` : 'sem datas'}</strong></span>
+                          <span title={m ? `Média de ${m.horas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h por TPE em ${m.n} TPE(s) ${m.base === 'grupo' ? 'do mesmo principal › grupo' : 'do mesmo principal'}, ÷ ${horasDia.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h por dia útil` : 'Ainda não há horas apontadas neste grupo'}>
+                            Pela média{m?.base === 'principal' ? ' do principal' : ' do grupo'}: <strong>{m ? `${m.dias} ${m.dias === 1 ? 'dia útil' : 'dias úteis'}` : '—'}</strong>{m && <span className="muted"> ({m.horas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h · {m.n} TPE)</span>}
+                          </span>
+                          {dif != null && dif !== 0 && <span className={`badge ${dif > 0 ? 'azul' : 'ambar'}`} title={dif > 0 ? 'Prazo definido maior que a média' : 'Prazo definido menor que a média'}>{dif > 0 ? `+${dif}` : dif} d vs média</span>}
+                        </div>)
+                    })()}
                     {pred && <div className="small muted">Depois de <strong>{pred.codigo}</strong>{pred.responsavel && String(pred.responsavel_id) !== rec ? ` (${pred.responsavel})` : ''}</div>}
                     {!p?.iniciada && t.data_inicio && t.prazo && (
                       <label className="inicio-manual small">

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { lerDiasEspeciais, paraParametros } from '../lib/dados'
 import { capacidade, tpeBase } from '../lib/calculo'
 import { dataBR, h1, hojeISO, pct, somaDias } from '../lib/formato'
+import { diasDeAusencia } from '../lib/agenda'
 
 /**
  * Indicadores do próprio projetista, com a mesma regra da tabela "Produtividade e capacidade da equipe"
@@ -24,10 +25,10 @@ const matiz = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 120)
 export default function MeuDesempenho({ recursoId }: { recursoId: number }) {
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [aps, setAps] = useState<any[] | null>(null)
-  const [base, setBase] = useState<{ p: any; feriados: Set<string> } | null>(null)
+  const [base, setBase] = useState<{ p: any; feriados: Set<string>; ferias: Set<string> } | null>(null)
   useEffect(() => {
-    Promise.all([supabase.rpc('parametros_vigentes', { p_dia: hojeISO() }), supabase.from('feriados').select('*')])
-      .then(([p, f]) => setBase({ p: paraParametros(p.data), feriados: lerDiasEspeciais(f.data ?? []).feriados }))
+    Promise.all([supabase.rpc('parametros_vigentes', { p_dia: hojeISO() }), supabase.from('feriados').select('*'), supabase.from('ausencias').select('*').eq('recurso_id', recursoId)])
+      .then(([p, f, a]) => setBase({ p: paraParametros(p.data), feriados: lerDiasEspeciais(f.data ?? []).feriados, ferias: diasDeAusencia((a.data ?? []) as any[], recursoId) }))
   }, [])
   useEffect(() => {
     const [ini, fim] = intervalo(periodo)
@@ -44,7 +45,7 @@ export default function MeuDesempenho({ recursoId }: { recursoId: number }) {
     const d0 = dias[0] ?? null, d1 = dias[dias.length - 1] ?? null
     const horas = aps.reduce((s, a) => s + Number(a.horas_totais), 0)
     const extras = aps.reduce((s, a) => s + Number(a.horas_extras), 0)
-    const cap = d0 && d1 ? capacidade(d0, d1, base.p, base.feriados) : 0
+    const cap = d0 && d1 ? capacidade(d0, d1, base.p, base.feriados, base.ferias) : 0 // férias não contam como capacidade
     const diasTrab = new Set(dias).size
     const tpes = new Set(aps.map((a) => tpeBase(String(a.tpe_codigo)))).size
     return { d0, d1, horas, extras, cap, diasTrab, tpes, aloc: cap ? horas / cap : 0, pctHe: horas ? extras / horas : 0, hDia: diasTrab ? horas / diasTrab : 0, hTpe: tpes ? horas / tpes : 0 }

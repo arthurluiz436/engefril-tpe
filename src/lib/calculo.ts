@@ -103,7 +103,8 @@ export function horasPorDiaUtil(p: Parametros): number {
   return ((p.jornada_seg_qui_min / 60 - almoco) * 4 + (p.jornada_sex_min / 60 - almoco)) / 5
 }
 /** Horas disponíveis de UMA pessoa entre duas datas: dias úteis × 9 h (seg–qui) / 8 h (sex). */
-export function capacidade(ini: string, fim: string, p: Parametros, feriados: Set<string>): number {
+/** `ausente`: dias de férias/ausência da pessoa — nunca contam como capacidade (mesmo que o período cruze meses). */
+export function capacidade(ini: string, fim: string, p: Parametros, feriados: Set<string>, ausente?: Set<string>): number {
   if (fim < ini) return 0
   const almoco = (min(p.almoco_fim) - min(p.almoco_inicio)) / 60
   const hsq = p.jornada_seg_qui_min / 60 - almoco
@@ -113,6 +114,7 @@ export function capacidade(ini: string, fim: string, p: Parametros, feriados: Se
     const w = isoDow(d)
     if (w >= 6) continue
     if (p.descontar_feriados_capacidade && feriados.has(d)) continue
+    if (ausente?.has(d)) continue
     total += w === 5 ? hsex : hsq
   }
   return total
@@ -150,6 +152,8 @@ export interface OpcoesIndicadores {
    * false: regra original da VER_035 (cada revisão é uma TPE), usada na reconciliação com a planilha.
    */
   agruparRevisoes?: boolean
+  /** dias de férias/ausência de cada projetista (por nome): descontados da capacidade dele */
+  ferias?: Map<string, Set<string>>
 }
 
 export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], recursos: string[], p: Parametros, feriados: Set<string>,
@@ -222,16 +226,18 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
     const as = aps.filter((a) => a.recurso_nome === nome)
     const ds = as.map((a) => a.dia).sort()
     const d0 = ds[0] ?? null, d1 = ds[ds.length - 1] ?? null
-    const cap = d0 && d1 ? capacidade(d0, d1, p, feriados) : 0
+    const fer = opcoes.ferias?.get(nome)
+    const cap = d0 && d1 ? capacidade(d0, d1, p, feriados, fer) : 0
+    const diasFerias = d0 && d1 && fer ? [...fer].filter((x) => x >= d0 && x <= d1 && isoDow(x) <= 5).length : 0
     const h = soma(as.map((a) => a.horas_totais)), x = soma(as.map((a) => a.horas_extras))
     const diasTrab = new Set(as.map((a) => a.dia)).size
     const tpesAt = new Set(as.map((a) => chave(a.tpe_codigo))).size
     return { recurso: nome, primeiro_dia: d0, ultimo_dia: d1, dias: diasTrab, capacidade: cap, horas_normais: h - x, horas_extras: x,
-      horas: h, alocacao: div(h, cap), pct_he: div(x, h), media_dia: div(h, diasTrab), tpes_atendidos: tpesAt, horas_por_tpe: div(h, tpesAt),
+      horas: h, alocacao: div(h, cap), dias_ferias: diasFerias, pct_he: div(x, h), media_dia: div(h, diasTrab), tpes_atendidos: tpesAt, horas_por_tpe: div(h, tpesAt),
       custo: soma(as.map((a) => a.custo_total ?? 0)) }
   })
 
-  const meses: { mes: string; capacidade: number; equipe: number; extras: number; custo: number; porRecurso: Record<string, { h: number; pct: number; custo: number }> }[] = []
+  const meses: { mes: string; capacidade: number; equipe: number; extras: number; custo: number; porRecurso: Record<string, { h: number; pct: number; custo: number; cap: number; ferias: number }> }[] = []
   if (ini && fim) {
     let m = ini.slice(0, 7) + '-01'
     while (m <= fim) {
@@ -240,10 +246,14 @@ export function indicadores(aps: LinhaAp[], tpes: LinhaTPE[], oss: LinhaOS[], re
       const b0 = m < ini ? ini : m, b1 = ultimo > fim ? fim : ultimo
       const cap = capacidade(b0, b1, p, feriados)
       const as = aps.filter((x) => x.dia.slice(0, 7) === m.slice(0, 7))
-      const pr: Record<string, { h: number; pct: number; custo: number }> = {}
+      const pr: Record<string, { h: number; pct: number; custo: number; cap: number; ferias: number }> = {}
       for (const r of recursos) {
         const h = soma(as.filter((x) => x.recurso_nome === r).map((x) => x.horas_totais))
-        pr[r] = { h, pct: div(h, cap), custo: soma(as.filter((x) => x.recurso_nome === r).map((x) => x.custo_total ?? 0)) }
+        // capacidade da pessoa no mês: sem os dias de férias dela (que podem começar num mês e terminar no outro)
+        const fer = opcoes.ferias?.get(r)
+        const capR = fer ? capacidade(b0, b1, p, feriados, fer) : cap
+        const ferMes = fer ? [...fer].filter((x) => x >= b0 && x <= b1 && isoDow(x) <= 5).length : 0
+        pr[r] = { h, pct: div(h, capR), cap: capR, ferias: ferMes, custo: soma(as.filter((x) => x.recurso_nome === r).map((x) => x.custo_total ?? 0)) }
       }
       meses.push({ mes: m, capacidade: cap, equipe: soma(as.map((x) => x.horas_totais)), extras: soma(as.map((x) => x.horas_extras)),
         custo: soma(as.map((x) => x.custo_total ?? 0)), porRecurso: pr })

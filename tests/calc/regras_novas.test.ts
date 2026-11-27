@@ -1,6 +1,6 @@
 // Regras acrescentadas depois da VER_035: jornada flexível informada e médias por TPE com revisões.
 import { describe, expect, it } from 'vitest'
-import { calcularApontamento, indicadores, PARAMETROS_VER035 as P, tpeBase, type DiaEspecial } from '../../src/lib/calculo'
+import { calcularApontamento, capacidade, indicadores, PARAMETROS_VER035 as P, tpeBase, type DiaEspecial } from '../../src/lib/calculo'
 
 const F = new Set<string>()
 
@@ -60,5 +60,32 @@ describe('Feriados e dias atípicos no cálculo (prévia do Registrar atividade)
     expect([c('2026-11-28').tipo_dia, c('2026-11-28').horas_normais, c('2026-11-28').horas_extras]).toEqual(['DIA ÚTIL', 4, 0])
     expect([c('2026-12-05').tipo_dia, c('2026-12-05').horas_extras, c('2026-12-05').adicional]).toEqual(['SÁBADO', 4, 0.5])
     expect(c('2026-11-23').custo_total).toBeCloseTo(4 * 50 * 1.6)
+  })
+})
+
+describe('Capacidade sem as férias', () => {
+  // férias de 26/10 a 13/11/2026 (cruza outubro e novembro)
+  const ferias = new Set<string>()
+  for (let d = new Date('2026-10-26T12:00:00Z'); d <= new Date('2026-11-13T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) ferias.add(d.toISOString().slice(0, 10))
+  it('os dias de férias não contam como capacidade', () => {
+    // 26/10 a 30/10: seg–qui 9 h + sex 8 h = 44 h, todos de férias
+    expect(capacidade('2026-10-26', '2026-10-30', P, F)).toBe(44)
+    expect(capacidade('2026-10-26', '2026-10-30', P, F, ferias)).toBe(0)
+  })
+  it('cada mês desconta só os dias de férias dele', () => {
+    const ap = (dia: string, h: number) => ({ tpe_codigo: 'TPE-001.0', os: 1, principal: 'EQ', grupo: 'VASO', recurso_nome: 'Bia', dia, tipo_dia: 'DIA ÚTIL',
+      horas_normais: h, horas_extras: 0, horas_totais: h, custo_normal: 0, custo_he: 0, custo_total: 0 })
+    const aps = [ap('2026-10-01', 9), ap('2026-10-23', 8), ap('2026-11-16', 9), ap('2026-11-30', 9)]
+    const tpes = [{ codigo: 'TPE-001.0', os: 1, principal: 'EQ', grupo: 'VASO', status: 'EM ANDAMENTO', data_inicio: null, data_fim: null, revisao: 0 }]
+    const sem = indicadores(aps, tpes, [], ['Bia'], P, F)
+    const com = indicadores(aps, tpes, [], ['Bia'], P, F, { ferias: new Map([['Bia', ferias]]) })
+    const out = (k: any) => k.meses.find((m: any) => m.mes.startsWith('2026-10')).porRecurso.Bia
+    const nov = (k: any) => k.meses.find((m: any) => m.mes.startsWith('2026-11')).porRecurso.Bia
+    expect(out(com).cap).toBe(out(sem).cap - 44)          // outubro: 5 dias úteis de férias
+    expect(out(com).ferias).toBe(5)
+    expect(nov(com).ferias).toBe(10)                       // novembro: 02 a 13/11
+    expect(nov(com).pct).toBeGreaterThan(nov(sem).pct)     // mesma hora, capacidade menor
+    expect(com.porRecurso[0].dias_ferias).toBe(15)
+    expect(com.porRecurso[0].capacidade).toBe(sem.porRecurso[0].capacidade - 44 - 88)
   })
 })

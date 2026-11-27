@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useBase } from '../../lib/base'
 import { DEFINICOES, indicadores } from '../../lib/calculo'
-import { paraParametros } from '../../lib/dados'
+import { feriasPorNome, paraParametros } from '../../lib/dados'
 import { corRecurso } from '../../lib/agenda'
 import { dataBR, h1, int, mesBR, osBR, pct, reais, reais0 } from '../../lib/formato'
 import { Cabecalho, Carregando } from '../../components/ui'
@@ -81,7 +81,7 @@ export default function Indicadores() {
     const tpes = r.tpes.filter((t: any) => okTpe(t) && (!fProj || t.responsavel === fProj || comAp.has(t.id)))
     return { ...r, aps, tpes }
   }, [base, periodo, fPrincipal, fGrupo, fProj])
-  const k = useMemo(() => recorte && indicadores(recorte.aps, recorte.tpes, recorte.os, recursos, paraParametros(recorte.parametros), recorte.feriados), [recorte, recursos])
+  const k = useMemo(() => recorte && indicadores(recorte.aps, recorte.tpes, recorte.os, recursos, paraParametros(recorte.parametros), recorte.feriados, { ferias: feriasPorNome(recorte.recursos, recorte.ausencias) }), [recorte, recursos])
   if (!k || !base || !periodo) return <Carregando />
   const r = k.resumo
   const Proj = ({ nome }: { nome: string }) => (
@@ -120,14 +120,14 @@ export default function Indicadores() {
           <span>0% pouco ocupado</span><span>·</span><span>100% capacidade cheia</span><span>·</span><span>▲ acima de 100%: hora extra</span>
         </div>
         <div className="rolagem"><table className="tabela ind-tabela"><thead><tr><ordRec.Th k="recurso">Projetista</ordRec.Th><ordRec.Th k="primeiro_dia">1º dia</ordRec.Th><ordRec.Th k="ultimo_dia">Último dia</ordRec.Th><ordRec.Th k="dias" num>Dias</ordRec.Th><ordRec.Th k="capacidade" num>Capacidade (h)</ordRec.Th><ordRec.Th k="horas" num>Horas</ordRec.Th><ordRec.Th k="alocacao" num title={DEFINICOES.alocacao.denominador}>Alocação</ordRec.Th><ordRec.Th k="pct_he" num>% H.E.</ordRec.Th><ordRec.Th k="media_dia" num>h/dia</ordRec.Th><ordRec.Th k="tpes_atendidos" num>TPEs</ordRec.Th><ordRec.Th k="horas_por_tpe" num>h/TPE</ordRec.Th></tr></thead>
-          <tbody>{ordRec.ordenar(k.porRecurso, (x: any, c) => x[c]).map((x) => <tr key={x.recurso} style={{ boxShadow: `inset 4px 0 0 ${cores.get(x.recurso) ?? 'transparent'}` }}><td><Proj nome={x.recurso} /></td><td>{dataBR(x.primeiro_dia)}</td><td>{dataBR(x.ultimo_dia)}</td><td className="num">{x.dias}</td><td className="num">{h1(x.capacidade)}</td><td className="num">{h1(x.horas)}</td>
+          <tbody>{ordRec.ordenar(k.porRecurso, (x: any, c) => x[c]).map((x) => <tr key={x.recurso} style={{ boxShadow: `inset 4px 0 0 ${cores.get(x.recurso) ?? 'transparent'}` }}><td><Proj nome={x.recurso} /></td><td>{dataBR(x.primeiro_dia)}</td><td>{dataBR(x.ultimo_dia)}</td><td className="num">{x.dias}</td><td className="num" title={x.dias_ferias ? `Já sem ${x.dias_ferias} dia(s) útil(eis) de férias` : undefined}>{h1(x.capacidade)}{x.dias_ferias > 0 && <div className="ind-ferias">− {x.dias_ferias} d de férias</div>}</td><td className="num">{h1(x.horas)}</td>
             <td className="num">{x.capacidade > 0 ? <Pct v={x.alocacao} aloc /> : '—'}</td><td className="num">{x.pct_he > 0.0001 ? <span className="ind-he">{pct(x.pct_he)}</span> : pct(x.pct_he)}</td><td className="num">{h1(x.media_dia)}</td><td className="num">{x.tpes_atendidos}</td><td className="num">{h1(x.horas_por_tpe)}</td></tr>)}</tbody></table></div></div>
       <div className="card"><h2>5. Carga mensal (horas e índice de alocação)</h2>
         <p className="muted small" style={{ marginTop: 0 }}>A cor de fundo segue a alocação do mês: vermelho claro = pouco ocupado, verde = capacidade cheia.</p>
         <div className="rolagem"><table className="tabela ind-tabela"><thead><tr><th>Mês</th><th className="num">Capac./pessoa</th>{recursos.map((n) => <th key={n} className="num"><Proj nome={n} /></th>)}<th className="num">Equipe (h)</th><th className="num">Extras (h)</th><th className="num">Custo</th></tr></thead>
           <tbody>{k.meses.map((m) => <tr key={m.mes}><td>{mesBR(m.mes)}</td><td className="num">{h1(m.capacidade)}</td>{recursos.map((n) => {
-            const v = m.porRecurso[n]?.pct ?? 0, tem = (m.porRecurso[n]?.h ?? 0) > 0
-            return <td key={n} className="num" style={tem ? { background: fundoAloc(v) } : undefined}>{h1(m.porRecurso[n]?.h)} <span className="small" style={{ color: tem ? corAloc(v) : 'var(--cinza-500)', fontWeight: tem ? 600 : 400 }}>({pct(v)})</span></td>
+            const v = m.porRecurso[n]?.pct ?? 0, tem = (m.porRecurso[n]?.h ?? 0) > 0, fer = m.porRecurso[n]?.ferias ?? 0
+            return <td key={n} className="num" style={tem ? { background: fundoAloc(v) } : undefined} title={fer ? `${fer} dia(s) útil(eis) de férias neste mês: capacidade de ${h1(m.porRecurso[n]?.cap)} h, já sem as férias` : undefined}>{h1(m.porRecurso[n]?.h)} <span className="small" style={{ color: tem ? corAloc(v) : 'var(--cinza-500)', fontWeight: tem ? 600 : 400 }}>({pct(v)})</span>{fer > 0 && <div className="ind-ferias">férias {fer} d · capac. {h1(m.porRecurso[n]?.cap)} h</div>}</td>
           })}
             <td className="num">{h1(m.equipe)}</td><td className="num">{m.extras > 0.0001 ? <span className="ind-he">{h1(m.extras)}</span> : h1(m.extras)}</td><td className="num">{reais0(m.custo)}</td></tr>)}</tbody></table></div></div>
       <div className="card"><h2>6. Tempo gasto por O.S.</h2>

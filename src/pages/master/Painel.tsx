@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useBase } from '../../lib/base'
 import { useAuth } from '../../lib/auth'
 import { indicadores } from '../../lib/calculo'
-import { paraParametros, prazosDasOS, situacaoPrazo } from '../../lib/dados'
+import { feriasPorNome, paraParametros, prazosDasOS, situacaoPrazo } from '../../lib/dados'
 import { dataBR, h1, hm, hojeISO, int, pct, reais0, somaDias } from '../../lib/formato'
 import { Aviso, Cabecalho, Carregando, Icone, Kpi, Selo, SeloPrazo } from '../../components/ui'
 import Gantt from '../../components/Gantt'
@@ -15,7 +15,7 @@ export default function Painel() {
   const navegar = useNavigate()
   const [periodo, setPeriodo] = usePeriodo(base)
   const recorte = useMemo(() => (base ? filtrarPeriodo(base, periodo) : null), [base, periodo])
-  const k = useMemo(() => recorte && indicadores(recorte.aps, recorte.tpes, recorte.os, recorte.recursos.map((r: any) => r.nome), paraParametros(recorte.parametros), recorte.feriados), [recorte])
+  const k = useMemo(() => recorte && indicadores(recorte.aps, recorte.tpes, recorte.os, recorte.recursos.map((r: any) => r.nome), paraParametros(recorte.parametros), recorte.feriados, { ferias: feriasPorNome(recorte.recursos, recorte.ausencias) }), [recorte])
   const pend = useMemo(() => {
     if (!base) return null
     const abertas = base.tpes.filter((t: any) => t.status !== 'FINALIZADA' && !t.arquivada)

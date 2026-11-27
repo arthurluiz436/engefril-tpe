@@ -545,3 +545,11 @@ section.card h3 { font-size: .92rem; margin: 6px 0 10px; color: var(--grafite-90
 .g2-alca { color: var(--cinza-500); font-size: .75rem; letter-spacing: -2px; margin-right: -2px; user-select: none; }
 .g2-marca-arraste { position: absolute; left: 0; right: 0; height: 3px; background: var(--azul); border-radius: 2px; z-index: 5; box-shadow: 0 0 0 2px rgba(4, 74, 179, .18); }
 body.g2-arrastando, body.g2-arrastando * { cursor: grabbing !important; user-select: none !important; }
+
+/* Sequência: caixa com o texto ao lado e prazos (definido × média) */
+.check-lado { display: flex; align-items: flex-start; gap: 9px; flex-wrap: nowrap; font-size: .82rem; line-height: 1.35; cursor: pointer; }
+.check-lado input[type='checkbox'] { width: 17px; height: 17px; min-height: 0; margin: 1px 0 0; flex: none; accent-color: var(--azul); }
+.check-lado > span { flex: 1; min-width: 0; }
+.prazos-seq { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 4px; padding: 5px 9px; border-radius: 6px; background: var(--cinza-50); border: 1px solid var(--cinza-200); width: fit-content; max-width: 100%; }
+
+.ind-ferias { font-size: .68rem; color: #8a5f00; white-space: nowrap; }

@@ -1,3 +1,4 @@
+import { diasDeAusencia } from './agenda'
 import type { Ausencia } from './agenda'
 import type { DiaEspecial } from './calculo'
 import { supabase, buscarTudo } from './supabase'
@@ -105,3 +106,10 @@ export const faltaMigracao = (e: unknown) => /cronograma_equipe|calendario_equip
 
 /** Prazo final de cada O.S. em andamento (marcado nos cronogramas). */
 export const prazosDasOS = (os: any[]) => new Map<number, string>(os.filter((o) => o.prazo_final && o.status !== 'FINALIZADA').map((o) => [o.os, String(o.prazo_final).slice(0, 10)]))
+
+/** Dias de férias/ausência de cada projetista, por nome (usado para descontar da capacidade nos indicadores). */
+export function feriasPorNome(recursos: any[], ausencias: any[] = []): Map<string, Set<string>> {
+  const m = new Map<string, Set<string>>()
+  for (const r of recursos) { const s = diasDeAusencia(ausencias, r.id); if (s.size) m.set(r.nome, s) }
+  return m
+}
