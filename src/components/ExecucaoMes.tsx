@@ -149,7 +149,7 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
         <span><span className="selo-prazo atraso">!</span>em aberto e atrasada</span>
         <span><i className="fer" />férias / ausência (na cor do projetista)</span>
       </div>
-      <div className={`ex-layout ${osMes.length ? "" : "so-grafico"}`}>
+      <div className="ex-layout">
       <div ref={caixa} className="ex-grafico">
       {!temDados ? <p className="muted small">Nenhum apontamento neste mês para os projetistas visíveis.</p> : (
         <div className="ex-svg">
@@ -227,25 +227,31 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
 
       {osMes.length > 0 && (
         <div className="ex-os">
-          <h3 style={{ margin: '0 0 4px' }}>O.S. trabalhadas no mês</h3>
-          <div className="row small" style={{ gap: 18 }}>
-            <span><strong>{osMes.length}</strong> O.S.</span><span><strong>{hm(total)}</strong> apontadas</span>
-            <span><strong>{new Set(osMes.flatMap((x) => [...x.tpes])).size}</strong> TPEs</span>
+          <div className="row" style={{ gap: 18, alignItems: 'baseline', marginTop: 6 }}>
+            <h3 style={{ margin: 0 }}>O.S. trabalhadas no mês</h3>
+            <span className="small"><strong>{osMes.length}</strong> O.S.</span><span className="small"><strong>{hm(total)}</strong> apontadas</span>
+            <span className="small"><strong>{new Set(osMes.flatMap((x) => [...x.tpes])).size}</strong> TPEs</span>
           </div>
-          <div className="ex-os-grade">
+          <div className="ex-os-lista" role="table" aria-label="O.S. trabalhadas no mês">
+            <div className="ex-os-linha ex-os-cab" role="row">
+              <span>O.S.</span><span>Cliente</span><span className="num">Horas</span><span>Período</span><span>Horas por projetista</span><span>TPEs</span>
+            </div>
             {osMes.map((x) => {
               const partes = [...x.proj].sort((a, b) => b[1] - a[1])
+              const maior = osMes[0]?.h || 1
               return (
-                <div key={x.os} className="ex-os-card">
-                  <span className="ex-os-num">OS {osBR(x.os)}</span>
-                  <div className="ex-os-cli">{x.cliente || '—'}</div>
-                  <div className="row small" style={{ justifyContent: 'space-between' }}>
-                    <span><strong>{hm(x.h)}</strong> <span className="muted">· {total ? Math.round((x.h / total) * 100) : 0}% do mês</span></span>
-                    <span className="muted">{dataBR(x.ini).slice(0, 5)} – {dataBR(x.fim).slice(0, 5)}</span>
-                  </div>
-                  <div className="ex-os-barra">{partes.map(([id, h]) => <span key={id} title={`${nomeDe(id)}: ${hm(h)}`} style={{ width: `${(h / x.h) * 100}%`, background: cor.get(id) ?? '#6b7079' }} />)}</div>
-                  <div className="ex-os-proj">{partes.map(([id, h]) => <span key={id}><i style={{ background: cor.get(id) ?? '#6b7079' }} />{nomeDe(id).split(' ')[0]} {hm(h)}</span>)}</div>
-                  <div className="muted small">{x.tpes.size} TPE(s): {[...x.tpes].sort().join(', ')}{x.he > 0.0001 ? <span className="ind-he"> · {hm(x.he)} extra</span> : null}</div>
+                <div key={x.os} className="ex-os-linha" role="row">
+                  <span><span className="ex-os-num">OS {osBR(x.os)}</span></span>
+                  <span className="ex-os-cli">{x.cliente || '—'}</span>
+                  <span className="num"><strong>{hm(x.h)}</strong><span className="muted small"> · {total ? Math.round((x.h / total) * 100) : 0}%</span>{x.he > 0.0001 && <div className="ind-he small">{hm(x.he)} extra</div>}</span>
+                  <span className="muted small">{dataBR(x.ini).slice(0, 5)}{x.fim !== x.ini ? ` – ${dataBR(x.fim).slice(0, 5)}` : ''}</span>
+                  <span className="ex-os-dist">
+                    <span className="ex-os-barra" style={{ width: `${Math.max(8, (x.h / maior) * 100)}%` }} title="Comprimento proporcional às horas da O.S. no mês">
+                      {partes.map(([id, h]) => <span key={id} title={`${nomeDe(id)}: ${hm(h)}`} style={{ width: `${(h / x.h) * 100}%`, background: cor.get(id) ?? '#6b7079' }} />)}
+                    </span>
+                    <span className="ex-os-proj">{partes.map(([id, h]) => <span key={id}><i style={{ background: cor.get(id) ?? '#6b7079' }} />{nomeDe(id).split(' ')[0]} {hm(h)}</span>)}</span>
+                  </span>
+                  <span className="small"><strong>{x.tpes.size}</strong> <span className="muted">{[...x.tpes].sort().join(', ')}</span></span>
                 </div>)
             })}
           </div>
