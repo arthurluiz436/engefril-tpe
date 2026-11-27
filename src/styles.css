@@ -603,13 +603,19 @@ body.g2-arrastando, body.g2-arrastando * { cursor: grabbing !important; user-sel
 .ex-svg svg { display: block; }
 .ex-os { display: grid; gap: 6px; }
 .ex-os-lista { border: 1px solid var(--cinza-200); border-radius: 10px; overflow: hidden; background: #fff; }
-.ex-os-linha { display: grid; grid-template-columns: 96px minmax(150px, 1.1fr) 100px 96px minmax(240px, 1.6fr) minmax(200px, 1.6fr); gap: 14px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--cinza-100); border-left: 3px solid var(--azul); }
+.ex-os-linha { display: grid; grid-template-columns: 96px minmax(160px, 1.1fr) 120px 110px minmax(240px, 1.6fr) 74px minmax(200px, 1.6fr); gap: 18px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--cinza-100); border-left: 3px solid var(--azul); }
 .ex-os-linha:hover { background: rgba(4, 74, 179, .04); }
 .ex-os-linha .num { text-align: right; }
 .ex-os-cab { border-top: 0; border-left-color: transparent; background: var(--cinza-50, #f7f8fa); font-size: .7rem; font-weight: 700; color: var(--cinza-600); text-transform: uppercase; letter-spacing: .04em; padding-top: 6px; padding-bottom: 6px; }
 .ex-os-cab:hover { background: var(--cinza-50, #f7f8fa); }
 .ex-os-dist { display: grid; gap: 4px; }
-@media (max-width: 1000px) { .ex-os-linha { grid-template-columns: 96px 1fr 90px; } .ex-os-cab { display: none; } .ex-os-linha > :nth-child(n+4) { grid-column: 1 / -1; } }
+.ex-os-linha.clicavel { cursor: pointer; }
+.ex-os-linha.clicavel:focus-visible { outline: 2px solid var(--azul); outline-offset: -2px; }
+.ex-os-linha.ativa { background: rgba(4, 74, 179, .08); border-left-width: 6px; }
+.ex-os-linha.apagada { opacity: .5; }
+.ex-os-linha.apagada:hover { opacity: .85; }
+.filtro-os { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 7px 12px; border-radius: var(--raio-sm); background: #eef3fb; border: 1px solid #c4d6f2; color: #0b3a80; font-size: .85rem; }
+@media (max-width: 1000px) { .ex-os-linha { grid-template-columns: 96px 1fr 110px; } .ex-os-cab { display: none; } .ex-os-linha > :nth-child(n+4) { grid-column: 1 / -1; } .ex-os-linha > .num { text-align: left; } }
 .ex-os-num { display: inline-flex; width: fit-content; font-size: .72rem; font-weight: 700; color: var(--cinza-600); border: 1px dashed var(--cinza-500); border-radius: 99px; padding: 1px 8px; }
 .ex-os-cli { font-weight: 700; font-size: .85rem; }
 .ex-os-barra { height: 8px; background: var(--cinza-100); border-radius: 99px; overflow: hidden; display: flex; }

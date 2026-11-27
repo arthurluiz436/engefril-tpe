@@ -3,7 +3,7 @@ import { dataBR, hm, hojeISO, osBR, somaDias } from '../lib/formato'
 import { corRecurso, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 import { Dialogo, Icone } from './ui'
 import { useDica } from './Dica'
-import ExecucaoMes from './ExecucaoMes'
+import ExecucaoMes, { FaixaFiltroOS } from './ExecucaoMes'
 
 /**
  * Calendário mensal de apontamentos da equipe (modelo de agenda): cada apontamento aparece
@@ -49,6 +49,8 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
   const hoje = hojeISO()
   const [ocultos, setOcultos] = useState<Set<string>>(new Set())
   const [aberto, setAberto] = useState<string | null>(null)
+  // filtro por O.S. (clique na lista "O.S. trabalhadas no mês"): calendário e Execução do mês mostram só ela
+  const [filtroOS, setFiltroOS] = useState<number | null>(null)
   const dicaDia = useDica()
   // resumo flutuante do dia (abre ao clicar no número do dia)
   const [resumo, setResumo] = useState<{ d: string; x: number; y: number } | null>(null)
@@ -80,7 +82,8 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
   const nome = useMemo(() => new Map(recursos.map((r: any) => [String(r.id), r.nome as string])), [recursos])
   const tpe = useMemo(() => new Map(tpes.map((t: any) => [t.id, t])), [tpes])
   const diaEsp = useMemo(() => new Map(dias.map((d: any) => [String(d.data).slice(0, 10), d])), [dias])
-  const visiveis = entradas.filter((e) => !ocultos.has(String(e.recurso_id)))
+  const osDe = (e: EntradaCal) => { const t: any = tpe.get(e.tpe_id); return t?.os != null ? Number(t.os) : null }
+  const visiveis = entradas.filter((e) => !ocultos.has(String(e.recurso_id)) && (filtroOS == null || osDe(e) === filtroOS))
   const porDia = useMemo(() => {
     const m = new Map<string, EntradaCal[]>()
     for (const e of visiveis) { const d = String(e.dia).slice(0, 10); m.set(d, [...(m.get(d) ?? []), e]) }
@@ -163,6 +166,7 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
         <h2 style={{ margin: 0, fontWeight: 600 }}>{MESES[mM - 1]} de {aM}</h2>
         {carregando && <span className="spinner" aria-label="Carregando" />}
       </div>
+      {filtroOS != null && <FaixaFiltroOS os={filtroOS} cliente={clienteOS.get(filtroOS)} limpar={() => setFiltroOS(null)} />}
       <div className="row cal-legenda" style={{ gap: 6 }}>
         {recursos.map((r: any, i: number) => {
           const id = String(r.id), off = ocultos.has(id)
@@ -201,7 +205,7 @@ export default function Calendario({ entradas, tpes, recursos, dias = [], mes, a
         ferias={ausencias.filter((a) => String(a.inicio).slice(0, 10) <= resumo.d && String(a.fim).slice(0, 10) >= resumo.d)} prazos={prazosDia.get(resumo.d) ?? []}
         clienteOS={clienteOS} tpe={tpe} cor={cor} nome={nome} aoFechar={() => setResumo(null)} />}
       {dicaDia.elemento}
-      <div className="card execucao-card"><ExecucaoMes entradas={entradas} mes={mes} tpes={tpes} recursos={recursos.filter((r: any) => !ocultos.has(String(r.id)))} cor={cor} naoUteis={naoUteisMes} ausencias={ausencias.filter((a) => !ocultos.has(String(a.recurso_id)))} aoMudarMes={aoMudarMes} /></div>
+      <div className="card execucao-card"><ExecucaoMes entradas={entradas} mes={mes} tpes={tpes} recursos={recursos.filter((r: any) => !ocultos.has(String(r.id)))} cor={cor} naoUteis={naoUteisMes} ausencias={ausencias.filter((a) => !ocultos.has(String(a.recurso_id)))} aoMudarMes={aoMudarMes} filtroOS={filtroOS} aoFiltrarOS={setFiltroOS} /></div>
       <Dialogo titulo={aberto ? `Apontamentos de ${dataBR(aberto)}` : ''} aberto={!!aberto} aoFechar={() => setAberto(null)}>
         <div className="stack" style={{ gap: 6 }}>
           {listaAberta.map((e) => (

@@ -19,6 +19,9 @@ interface Props {
   naoUteis: Set<string>     // fins de semana são calculados; aqui feriados/dias sem expediente
   ausencias?: Ausencia[]
   aoMudarMes?: (mes: string) => void
+  /** O.S. escolhida na lista: o gráfico mostra só os apontamentos dela */
+  filtroOS?: number | null
+  aoFiltrarOS?: (os: number | null) => void
 }
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -28,7 +31,15 @@ const SEM = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 const ROT = 270, H_CAB = 46, H_PISTA = 32, H_LIN = 26, TAM = 16
 interface Linha { cod: string; rec: string; nome: string; dias: { dia: string; h: number; he: number; txt: string[] }[]; ini: number; fim: number; h: number; he: number; y: number; t: any }
 
-export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUteis, ausencias = [], aoMudarMes }: Props) {
+export function FaixaFiltroOS({ os, cliente, limpar }: { os: number; cliente?: string; limpar: () => void }) {
+  return (
+    <div className="filtro-os" role="status">
+      <span>Mostrando só os apontamentos da <strong>O.S. {osBR(os)}</strong>{cliente ? ` · ${cliente}` : ''}</span>
+      <button type="button" className="btn fantasma pequeno" onClick={limpar}>Mostrar todas</button>
+    </div>)
+}
+
+export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUteis, ausencias = [], aoMudarMes, filtroOS = null, aoFiltrarOS }: Props) {
   const dica = useDica()
   // a largura de cada dia acompanha o espaço disponível (sem rolagem quando cabe)
   const caixa = useRef<HTMLDivElement>(null)
@@ -62,11 +73,14 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
   }, [ausencias, mes, nDias])
 
   const { faixas, altura, posicoes, osMes, total } = useMemo(() => {
-    const doMes = entradas.filter((e) => String(e.dia).slice(0, 7) === mes)
+    const doMesTodas = entradas.filter((e) => String(e.dia).slice(0, 7) === mes)
+    const osDe = (e: EntradaCal) => { const t = porId.get(e.tpe_id) ?? porCodigo.get(e.tpe_codigo); return t?.os != null ? Number(t.os) : null }
+    const doMes = filtroOS == null ? doMesTodas : doMesTodas.filter((e) => osDe(e) === filtroOS)
     const visiveis = new Set(recursos.map((r: any) => String(r.id)))
     let y = H_CAB
     const posicoes = new Map<string, { xIni: number; xFim: number; y: number; l: Linha }>()
-    const faixas = recursos.map((r: any) => {
+    const comApont = new Set(doMes.map((e) => String(e.recurso_id)))
+    const faixas = recursos.filter((r: any) => filtroOS == null || comApont.has(String(r.id))).map((r: any) => {
       const id = String(r.id)
       const porTpe = new Map<string, Linha>()
       for (const e of doMes) {
@@ -90,7 +104,7 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
     })
     // O.S. trabalhadas no mês (só projetistas visíveis)
     const porOS = new Map<number, { os: number; cliente: string; h: number; he: number; ini: string; fim: string; tpes: Set<string>; proj: Map<string, number> }>()
-    for (const e of doMes) {
+    for (const e of doMesTodas) {
       if (!visiveis.has(String(e.recurso_id))) continue
       const t = porId.get(e.tpe_id) ?? porCodigo.get(e.tpe_codigo)
       if (t?.os == null) continue
@@ -102,7 +116,7 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
     }
     const osMes = [...porOS.values()].sort((a, b) => b.h - a.h)
     return { faixas, altura: y + 4, posicoes, osMes, total: osMes.reduce((s, x) => s + x.h, 0) }
-  }, [entradas, mes, recursos, cor, porId, porCodigo, DX]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [entradas, mes, recursos, cor, porId, porCodigo, DX, filtroOS]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function X(d: number) { return ROT + (d - 1) * DX }
   const W = ROT + nDias * DX + 12
@@ -149,6 +163,7 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
         <span><span className="selo-prazo atraso">!</span>em aberto e atrasada</span>
         <span><i className="fer" />férias / ausência (na cor do projetista)</span>
       </div>
+      {filtroOS != null && aoFiltrarOS && <FaixaFiltroOS os={filtroOS} cliente={osMes.find((x) => x.os === filtroOS)?.cliente} limpar={() => aoFiltrarOS(null)} />}
       <div className="ex-layout">
       <div ref={caixa} className="ex-grafico">
       {!temDados ? <p className="muted small">Nenhum apontamento neste mês para os projetistas visíveis.</p> : (
@@ -234,16 +249,20 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
           </div>
           <div className="ex-os-lista" role="table" aria-label="O.S. trabalhadas no mês">
             <div className="ex-os-linha ex-os-cab" role="row">
-              <span>O.S.</span><span>Cliente</span><span className="num">Horas</span><span>Período</span><span>Horas por projetista</span><span>TPEs</span>
+              <span>O.S.</span><span>Cliente</span><span>Horas</span><span>Período</span><span>Horas por projetista</span><span className="num">Qtd. TPEs</span><span>TPEs apontadas</span>
             </div>
             {osMes.map((x) => {
               const partes = [...x.proj].sort((a, b) => b[1] - a[1])
               const maior = osMes[0]?.h || 1
               return (
-                <div key={x.os} className="ex-os-linha" role="row">
+                <div key={x.os} role="row" tabIndex={aoFiltrarOS ? 0 : undefined}
+                  className={`ex-os-linha ${aoFiltrarOS ? 'clicavel' : ''} ${filtroOS === x.os ? 'ativa' : ''} ${filtroOS != null && filtroOS !== x.os ? 'apagada' : ''}`}
+                  title={aoFiltrarOS ? (filtroOS === x.os ? 'Clique para mostrar todas as O.S.' : 'Clique para ver só os apontamentos desta O.S. no calendário e na Execução do mês') : undefined}
+                  onClick={() => aoFiltrarOS?.(filtroOS === x.os ? null : x.os)}
+                  onKeyDown={(e) => { if (aoFiltrarOS && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); aoFiltrarOS(filtroOS === x.os ? null : x.os) } }}>
                   <span><span className="ex-os-num">OS {osBR(x.os)}</span></span>
                   <span className="ex-os-cli">{x.cliente || '—'}</span>
-                  <span className="num"><strong>{hm(x.h)}</strong><span className="muted small"> · {total ? Math.round((x.h / total) * 100) : 0}%</span>{x.he > 0.0001 && <div className="ind-he small">{hm(x.he)} extra</div>}</span>
+                  <span><strong>{hm(x.h)}</strong><span className="muted small"> · {total ? Math.round((x.h / total) * 100) : 0}%</span>{x.he > 0.0001 && <div className="ind-he small">{hm(x.he)} extra</div>}</span>
                   <span className="muted small">{dataBR(x.ini).slice(0, 5)}{x.fim !== x.ini ? ` – ${dataBR(x.fim).slice(0, 5)}` : ''}</span>
                   <span className="ex-os-dist">
                     <span className="ex-os-barra" style={{ width: `${Math.max(8, (x.h / maior) * 100)}%` }} title="Comprimento proporcional às horas da O.S. no mês">
@@ -251,7 +270,8 @@ export default function ExecucaoMes({ entradas, mes, tpes, recursos, cor, naoUte
                     </span>
                     <span className="ex-os-proj">{partes.map(([id, h]) => <span key={id}><i style={{ background: cor.get(id) ?? '#6b7079' }} />{nomeDe(id).split(' ')[0]} {hm(h)}</span>)}</span>
                   </span>
-                  <span className="small"><strong>{x.tpes.size}</strong> <span className="muted">{[...x.tpes].sort().join(', ')}</span></span>
+                  <span className="num"><strong>{x.tpes.size}</strong></span>
+                  <span className="small muted">{[...x.tpes].sort().join(', ')}</span>
                 </div>)
             })}
           </div>
