@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PointerEventReact } from 'react'
-import { dataBR, diasEntre, hojeISO, osBR, somaDias } from '../lib/formato'
-import { cargaDiaria, clarear, corRecurso, diasDeAusencia, ehDiaUtil, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
+import { dataBR, diasEntre, hm, hojeISO, osBR, somaDias } from '../lib/formato'
+import { CartaoTpe, situacaoTpe, useDica } from './Dica'
+import { cargaDiaria, clarear, corRecurso, diasDeAusencia, diasUteisEntre, ehDiaUtil, ROTULO_AUSENCIA, type Ausencia } from '../lib/agenda'
 
 /**
  * Cronograma (Gantt) da equipe, uma faixa por projetista (swimlane) na cor dele.
@@ -46,7 +47,6 @@ const H_PISTA = 32, H_LINHA = 28, H_CARGA = 18, H_EIXO = 50
 const SEM_AUSENCIAS: Ausencia[] = []
 const iso = (d?: string | null) => (d ? String(d).slice(0, 10) : null)
 const maior = (a: string, b?: string | null) => (b && b > a ? b : a)
-const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`
 const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const SEM = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
@@ -60,6 +60,7 @@ export default function Gantt(p: GanttProps) {
   const { tpes, recursos, feriados = new Set<string>(), ordem, datas, destaque, aoEscolher, diasAntes = 15, pxDia = 'ajustar',
     mostrarConcluidas = true, mostrarSetas = true, mostrarCarga = false, filtroOS = null, selecionada, aoSelecionar, ausencias = SEM_AUSENCIAS, prazosOS, arrastar } = p
   const rotRef = useRef<HTMLDivElement>(null)
+  const dica = useDica()
   // arrastar para reordenar: { id da TPE, posição de origem e destino na fila, y do ponteiro }
   const [arr, setArr] = useState<{ id: number; de: number; para: number; y0: number; ativo: boolean } | null>(null)
   const somente = p.somente == null ? null : new Set(Array.isArray(p.somente) ? p.somente : [p.somente])
@@ -243,6 +244,26 @@ export default function Gantt(p: GanttProps) {
   }
 
 
+  const cartaoDe = (l: Extract<Linha, { tipo: 'tarefa' }>) => {
+    const t = l.t, prazo = iso(t.prazo)
+    const iniPlan = iso(t.data_inicio) ?? iso(t.primeiro_apontamento)
+    const iniReal = iso(t.primeiro_apontamento) ?? (t.status === 'EM ANDAMENTO' ? iso(t.data_inicio) : null)
+    const fimReal = iso(t.data_fim) ?? (t.status === 'EM ANDAMENTO' ? null : iso(t.ultimo_apontamento))
+    const pred = t.predecessora_id ? porId.get(t.predecessora_id) : null
+    const prazoOS = t.os_prazo_final ? String(t.os_prazo_final).slice(0, 10) : prazosOS?.get(t.os)
+    return (
+      <CartaoTpe t={t} cor={l.pista.cor} projetista={l.pista.nome} situacao={situacaoTpe(t)}
+        numeros={[
+          { rot: 'Planejado', val: iniPlan && prazo ? `${dataBR(iniPlan).slice(0, 5)} → ${dataBR(prazo).slice(0, 5)}` : prazo ? `até ${dataBR(prazo).slice(0, 5)}` : '—', sub: iniPlan && prazo ? `${diasUteisEntre(iniPlan, prazo, feriados)} dias úteis` : undefined },
+          { rot: 'Realizado', val: iniReal ? `${dataBR(iniReal).slice(0, 5)} → ${fimReal ? dataBR(fimReal).slice(0, 5) : '…'}` : '—', sub: iniReal ? (l.feita ? 'concluída' : t.status === 'EM ANDAMENTO' ? 'em andamento' : 'último registro') : 'sem apontamentos' },
+          { rot: 'Horas', val: t.horas_totais != null ? hm(Number(t.horas_totais)) : '—', sub: t.qtd_apontamentos != null ? `${t.qtd_apontamentos} apontamento(s)` : undefined },
+        ]}
+        extra={<>
+          {pred && <div className="muted small">Predecessora: <strong>{pred.codigo}</strong>{pred.responsavel ? ` (${pred.responsavel})` : ''}</div>}
+          {prazoOS && <div className="muted small">Prazo final da O.S. {osBR(t.os)}: <strong>{dataBR(prazoOS)}</strong>{prazo && prazo > prazoOS ? <span className="texto-atraso"> · a TPE termina depois</span> : null}</div>}
+        </>} />)
+  }
+
   const conteudoTarefa = (l: Extract<Linha, { tipo: 'tarefa' }>) => {
     const t = l.t, cor = l.pista.cor
     const prazo = iso(t.prazo)
@@ -255,21 +276,12 @@ export default function Gantt(p: GanttProps) {
     const real = iniReal && fimReal ? recorta(iniReal, prazo && fimReal > prazo ? prazo : fimReal) : null
     const realTarde = iniReal && fimReal && prazo && fimReal > prazo ? recorta(maior(somaDias(prazo, 1), iniReal), fimReal) : null
     const lacuna = atraso && prazo ? recorta(somaDias(prazo, 1), fimEfetivo) : null
-    const pred = t.predecessora_id ? porId.get(t.predecessora_id) : null
-    const dica = [
-      `${t.codigo} · ${t.grupo ?? ''}`, t.descricao,
-      t.os != null ? `O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}` : '',
-      `Planejado: ${dataBR(iniPlan)} → ${dataBR(prazo)}`,
-      `Realizado: ${iniReal ? `${dataBR(iniReal)} → ${l.feita ? dataBR(fimReal) : t.status === 'EM ANDAMENTO' ? 'em andamento' : `último registro ${dataBR(fimReal)}`}` : 'sem apontamentos'}`,
-      atraso ? `${l.feita ? 'Concluída' : 'Está'} ${plural(atraso, 'dia', 'dias')} após o prazo` : prazo ? (l.feita ? 'Concluída no prazo' : 'Dentro do prazo') : 'Sem prazo definido',
-      pred ? `Predecessora: ${pred.codigo}` : '',
-    ].filter(Boolean).join('\n')
     const y = l.y
     return (
       <g key={`t${t.id}`} className={`g2-tarefa ${l.feita ? 'feita' : ''} ${podeArrastar(l) ? 'arrastavel' : ''} ${arr?.ativo && arr.id === t.id ? 'arrastando' : ''}`}
         onClick={aoSelecionar ? () => aoSelecionar(t) : undefined} onPointerDown={podeArrastar(l) ? (e) => iniciarArraste(t, e) : undefined}
+        onMouseMove={(e) => { if (!arr?.ativo) dica.mostrar(e, cartaoDe(l)) }} onMouseLeave={dica.esconder}
         style={aoSelecionar && !podeArrastar(l) ? { cursor: 'pointer' } : undefined}>
-        <title>{dica}</title>
         <rect x={0} y={y} width={W} height={l.h} fill="transparent" />
         {lacuna && <rect x={lacuna.x} y={y + 2} width={lacuna.w} height={l.h - 4} fill="url(#g2-hachura-leve)" rx={3} />}
         {plan && <rect x={plan.x} y={y + 5} width={plan.w} height={8} rx={3} fill={clarear(cor, 0.72)} stroke={clarear(cor, 0.35)} strokeWidth={1} />}
@@ -286,6 +298,7 @@ export default function Gantt(p: GanttProps) {
 
   return (
     <div className="gantt2">
+      {dica.elemento}
       <div className="gantt-legenda small">
         <span><i className="lg plan" /> Planejado</span>
         <span><i className="lg prazo" /> Prazo</span>
@@ -335,8 +348,7 @@ export default function Gantt(p: GanttProps) {
               return (
                 <div key={`r${t.id}`} className={`g2-rot-tarefa ${l.zebra ? 'zebra' : ''} ${selecionada === t.id ? 'sel' : ''} ${l.feita ? 'feita' : ''} ${podeArrastar(l) ? 'arrastavel' : ''} ${arr?.ativo && arr.id === t.id ? 'arrastando' : ''}`}
                   onPointerDown={podeArrastar(l) ? (e) => iniciarArraste(t, e) : undefined}
-                  style={{ top: l.y, height: l.h, borderLeftColor: l.pista.cor }} title={`${t.codigo} · O.S. ${osBR(t.os)}${t.cliente ? ` · ${t.cliente}` : ''}
-${t.descricao ?? ''}`}
+                  style={{ top: l.y, height: l.h, borderLeftColor: l.pista.cor }} onMouseMove={(e) => { if (!arr?.ativo) dica.mostrar(e, cartaoDe(l)) }} onMouseLeave={dica.esconder}
                   onClick={aoSelecionar ? () => aoSelecionar(t) : undefined}>
                   {podeArrastar(l) && <span className="g2-alca" aria-hidden="true" title="Arraste para mudar a ordem">⋮⋮</span>}
                   <span className={`gantt-n ${atrasada ? 'atrasada' : ''} ${l.feita ? 'ok' : ''}`}>{l.rot}</span>
